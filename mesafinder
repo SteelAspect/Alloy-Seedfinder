@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Cytra Mesa Finder launcher: sets up lib/ from your Minecraft 1.21.11 files (first run only), compiles, runs.
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/PrismLauncher/java/java-runtime-delta}"
+LOOM="$HOME/.gradle/caches/fabric-loom"
+LIB="$DIR/lib"
+OUT="$DIR/build"
+
+if [ ! -f "$LIB/.ready" ]; then
+  echo "First run: copying Minecraft 1.21.11 files into lib/ ..."
+  mkdir -p "$LIB"
+  mc=$(ls "$LOOM"/minecraftMaven/net/minecraft/minecraft-common/1.21.11-loom.mappings.*/minecraft-common-1.21.11-loom.mappings.*.jar 2>/dev/null | grep -v sources | head -1 || true)
+  if [ -z "$mc" ] || [ ! -f "$LOOM/1.21.11/minecraft-server.jar" ]; then
+    echo "Can't find the Minecraft 1.21.11 jars in $LOOM. Build any of your 1.21.11 mods once, then try again." >&2
+    exit 1
+  fi
+  cp "$mc" "$LIB/minecraft-1.21.11.jar"
+  tmp=$(mktemp -d)
+  unzip -q -o "$LOOM/1.21.11/minecraft-server.jar" 'META-INF/libraries/*' -d "$tmp"
+  find "$tmp" -name '*.jar' -exec cp {} "$LIB" \;
+  rm -rf "$tmp"
+  touch "$LIB/.ready"
+fi
+
+SRC="$DIR/src/dev/steelaspect/mesafinder/MesaFinder.java"
+if [ ! -f "$OUT/.built" ] || [ "$SRC" -nt "$OUT/.built" ]; then
+  rm -rf "$OUT" && mkdir -p "$OUT"
+  "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*" "$SRC"
+  touch "$OUT/.built"
+fi
+
+exec "$JAVA_HOME/bin/java" -Xmx4G -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"
