@@ -31,6 +31,20 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.biome.Biome;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.levelgen.LegacyRandomSource;
+import net.minecraft.world.level.levelgen.WorldgenRandom;
+import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
+import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
+import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+
 import java.io.File;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
@@ -74,23 +88,28 @@ public final class StructureFinder {
     private final HolderLookup.Provider lookup;
     private final RandomState random;
     private final NoiseBasedChunkGenerator generator;
-    private final LevelHeightAccessor heights = LevelHeightAccessor.create(-64, 384);
+    private final LevelHeightAccessor heights;
 
-    private StructureFinder(Options o) {
+    private final boolean nether;
+    private final MultiNoiseBiomeSource source;
+
+    private StructureFinder(Options o, boolean nether) {
         this.o = o;
+        this.nether = nether;
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         lookup = VanillaRegistries.createLookup();
         bindBiomeTags(lookup);
-        ResourceKey<NoiseGeneratorSettings> type = switch (o.worldType) {
+        ResourceKey<NoiseGeneratorSettings> type = nether ? NoiseGeneratorSettings.NETHER : switch (o.worldType) {
             case "large_biomes" -> NoiseGeneratorSettings.LARGE_BIOMES;
             case "amplified" -> NoiseGeneratorSettings.AMPLIFIED;
             default -> NoiseGeneratorSettings.OVERWORLD;
         };
         random = RandomState.create(lookup, type, o.seed);
-        MultiNoiseBiomeSource source = MultiNoiseBiomeSource.createFromPreset(
+        source = MultiNoiseBiomeSource.createFromPreset(
                 lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
-                        .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD));
+                        .getOrThrow(nether ? MultiNoiseBiomeSourceParameterLists.NETHER : MultiNoiseBiomeSourceParameterLists.OVERWORLD));
+        heights = nether ? LevelHeightAccessor.create(0, 256) : LevelHeightAccessor.create(-64, 384);
         generator = new NoiseBasedChunkGenerator(source, lookup.lookupOrThrow(Registries.NOISE_SETTINGS).getOrThrow(type));
     }
 
@@ -98,9 +117,12 @@ public final class StructureFinder {
         Options o = Options.parse(mode, args);
         if (o == null) return;
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
-        StructureFinder f = new StructureFinder(o);
-        if (mode.equals("huts")) f.huts();
-        else f.monuments();
+        StructureFinder f = new StructureFinder(o, mode.equals("fortresses"));
+        switch (mode) {
+            case "huts" -> f.huts();
+            case "fortresses" -> f.fortresses();
+            default -> f.monuments();
+        }
     }
 
     // ---------------------------------------------------------------- shared
@@ -410,6 +432,144 @@ public final class StructureFinder {
         return (double) in / total;
     }
 
+    // ---------------------------------------------------------------- nether fortresses
+
+    record Fortress(int x, int z, int pieces, int spawners, int wartRooms, long pieceArea, BoundingBox box, List<BoundingBox> parts) {}
+
+    private void fortresses() {
+        RandomSpreadStructurePlacement placement = placement(BuiltinStructureSets.NETHER_COMPLEXES);
+        Holder<Structure> fortress = lookup.lookupOrThrow(Registries.STRUCTURE).getOrThrow(BuiltinStructures.FORTRESS);
+        Holder<Structure> bastion = lookup.lookupOrThrow(Registries.STRUCTURE).getOrThrow(BuiltinStructures.BASTION_REMNANT);
+        StructureTemplatePool starts = lookup.lookupOrThrow(Registries.TEMPLATE_POOL)
+                .getOrThrow(ResourceKey.create(Registries.TEMPLATE_POOL, Identifier.withDefaultNamespace("bastion/starts"))).value();
+        int[] r = regionRange(placement.spacing());
+        int rows = r[1] - r[0] + 1;
+        OUT.printf(Locale.ROOT, "Seed %d, nether, searching %d blocks around %d, %d for fortresses at least %,d out (%,d possible spots)%n",
+                o.seed, o.radius, o.centerX, o.centerZ, o.minDist, (long) rows * (r[3] - r[2] + 1));
+        long start = System.nanoTime();
+        List<Fortress> found = Collections.synchronizedList(new ArrayList<>());
+        AtomicInteger done = new AtomicInteger(), last = new AtomicInteger(-1);
+        IntStream.rangeClosed(r[0], r[1]).parallel().forEach(rx -> {
+            for (int rz = r[2]; rz <= r[3]; rz++) {
+                ChunkPos chunk = placement.getPotentialStructureChunk(o.seed, rx * placement.spacing(), rz * placement.spacing());
+                int x = chunk.getMinBlockX(), z = chunk.getMinBlockZ();
+                if (!inArea(x, z) || Math.max(Math.abs(x), Math.abs(z)) < o.minDist) continue;
+                // The game picks fortress (weight 2) or bastion (weight 3); a bastion that fails its biome check
+                // (basalt deltas) falls back to a fortress.
+                WorldgenRandom pick = new WorldgenRandom(new LegacyRandomSource(0L));
+                pick.setLargeFeatureSeed(o.seed, chunk.x, chunk.z);
+                if (pick.nextInt(5) >= 2 && bastionFits(chunk, starts, bastion)) continue;
+                StructureStart s = fortress.value().generate(fortress, Level.NETHER, null, generator, source, random, null, o.seed,
+                        chunk, 0, heights, b -> fortress.value().biomes().contains(b));
+                if (!s.isValid()) continue;
+                int spawners = 0, warts = 0;
+                long area = 0;
+                List<BoundingBox> parts = new ArrayList<>();
+                for (var piece : s.getPieces()) {
+                    String n = piece.getClass().getSimpleName();
+                    if (n.equals("MonsterThrone")) spawners++;
+                    if (n.equals("CastleStalkRoom")) warts++;
+                    BoundingBox b = piece.getBoundingBox();
+                    parts.add(b);
+                    area += (long) b.getXSpan() * b.getZSpan();
+                }
+                found.add(new Fortress(x, z, s.getPieces().size(), spawners, warts, area, s.getBoundingBox(), parts));
+            }
+            progress(done, rows, last);
+        });
+
+        if (o.sample > 0) {
+            // Test helper: the fortress/bastion decision for the regions nearest the centre.
+            int crx = Math.floorDiv(o.centerX, placement.spacing() * 16), crz = Math.floorDiv(o.centerZ, placement.spacing() * 16);
+            int side = (int) Math.ceil(Math.sqrt(o.sample));
+            for (int i = 0; i < side; i++)
+                for (int j = 0; j < side; j++) {
+                    ChunkPos c = placement.getPotentialStructureChunk(o.seed, (crx + i) * placement.spacing(), (crz + j) * placement.spacing());
+                    WorldgenRandom pick = new WorldgenRandom(new LegacyRandomSource(0L));
+                    pick.setLargeFeatureSeed(o.seed, c.x, c.z);
+                    boolean bastionHere = pick.nextInt(5) >= 2 && bastionFits(c, starts, bastion);
+                    OUT.println("SAMPLE " + c.getMinBlockX() + " " + c.getMinBlockZ() + " " + (bastionHere ? "bastion_remnant" : "fortress"));
+                }
+        }
+        List<Fortress> list = new ArrayList<>(found);
+        // Rank by real floor area (overlapping pieces counted once) for the top candidates.
+        list.sort((a, b) -> Long.compare(b.pieceArea, a.pieceArea));
+        List<Fortress> top = new ArrayList<>();
+        for (Fortress f : list.subList(0, Math.min(300, list.size())))
+            top.add(new Fortress(f.x, f.z, f.pieces, f.spawners, f.wartRooms, unionArea(f.parts, f.box), f.box, f.parts));
+        top.sort((a, b) -> Long.compare(b.pieceArea, a.pieceArea));
+        OUT.printf(Locale.ROOT, "\r  done in %.1f s, %,d fortresses in the area%n%n", (System.nanoTime() - start) / 1e9, list.size());
+        if (top.isEmpty()) {
+            OUT.println("No fortresses found there.");
+            return;
+        }
+        OUT.printf(Locale.ROOT, "Biggest fortresses (nether coords):%n%n%-4s %-24s %-11s %-10s %-7s %-9s %-6s %s%n",
+                "#", "Centre (x, y, z)", "Box (x by z)", "Floor area", "Pieces", "Spawners", "Wart", "Overworld (x8)");
+        for (int i = 0; i < Math.min(o.top, top.size()); i++) {
+            Fortress f = top.get(i);
+            int cx = (f.box.minX() + f.box.maxX()) / 2, cz = (f.box.minZ() + f.box.maxZ()) / 2;
+            OUT.printf(Locale.ROOT, "%-4d %-24s %-11s %-10s %-7d %-9d %-6d %s%n", i + 1,
+                    cx + ", " + f.box.minY() + ", " + cz, f.box.getXSpan() + "x" + f.box.getZSpan(), String.format(Locale.ROOT, "%,d", f.pieceArea),
+                    f.pieces, f.spawners, f.wartRooms, String.format(Locale.ROOT, "%,d, %,d", (long) cx * 8, (long) cz * 8));
+        }
+        if (o.details) for (int i = 0; i < Math.min(o.top, top.size()); i++)
+            OUT.println("#" + (i + 1) + " start chunk corner: " + top.get(i).x + ", " + top.get(i).z);
+        OUT.println("\nFloor area = blocks covered by fortress pieces (where wither skeletons can spawn), overlaps counted once.");
+        OUT.println("y = bottom of the fortress. Teleport in the nether: /execute in minecraft:the_nether run tp @s <x> <y + 10> <z>");
+    }
+
+    private static long unionArea(List<BoundingBox> parts, BoundingBox all) {
+        int w = all.getXSpan(), l = all.getZSpan();
+        java.util.BitSet cells = new java.util.BitSet(w * l);
+        for (BoundingBox b : parts)
+            for (int x = b.minX(); x <= b.maxX(); x++)
+                for (int z = b.minZ(); z <= b.maxZ(); z++) cells.set((x - all.minX()) * l + (z - all.minZ()));
+        return cells.cardinality();
+    }
+
+    private final Map<Identifier, Vec3i> templateSizes = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Method TEMPLATE_BOX;
+
+    static {
+        try {
+            TEMPLATE_BOX = StructureTemplate.class.getDeclaredMethod("getBoundingBox", BlockPos.class, Rotation.class, BlockPos.class, Mirror.class, Vec3i.class);
+            TEMPLATE_BOX.setAccessible(true);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Would a bastion generate here? Same steps as the game's jigsaw start: random rotation, random start piece,
+     * then the biome at the centre of that piece (y 33) must allow bastions.
+     */
+    private boolean bastionFits(ChunkPos chunk, StructureTemplatePool starts, Holder<Structure> bastion) {
+        WorldgenRandom r = new WorldgenRandom(new LegacyRandomSource(0L));
+        r.setLargeFeatureSeed(o.seed, chunk.x, chunk.z);
+        Rotation rotation = Rotation.getRandom(r);
+        StructurePoolElement element = starts.getRandomTemplate(r);
+        Identifier id = ((SinglePoolElement) element).getTemplateLocation();
+        Vec3i size = templateSizes.computeIfAbsent(id, StructureFinder::readTemplateSize);
+        try {
+            BoundingBox box = (BoundingBox) TEMPLATE_BOX.invoke(null, new BlockPos(chunk.getMinBlockX(), 33, chunk.getMinBlockZ()), rotation, BlockPos.ZERO, Mirror.NONE, size);
+            int cx = (box.maxX() + box.minX()) / 2, cz = (box.maxZ() + box.minZ()) / 2;
+            return bastion.value().biomes().contains(source.getNoiseBiome(QuartPos.fromBlock(cx), QuartPos.fromBlock(33), QuartPos.fromBlock(cz), random.sampler()));
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static Vec3i readTemplateSize(Identifier id) {
+        String path = "/data/" + id.getNamespace() + "/structure/" + id.getPath() + ".nbt";
+        try (var in = StructureFinder.class.getResourceAsStream(path)) {
+            if (in == null) throw new IllegalStateException("Missing " + path);
+            ListTag size = NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap()).getListOrEmpty("size");
+            return new Vec3i(size.getIntOr(0, 0), size.getIntOr(1, 0), size.getIntOr(2, 0));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     // ---------------------------------------------------------------- options
 
     static final class Options {
@@ -420,11 +580,18 @@ public final class StructureFinder {
         int top = 25;
         int maxY = -50;
         int minCount = 3;
+        int minDist = 0;
+        int sample;
         boolean details;
         String worldType = "overworld";
 
         static Options parse(String mode, String[] args) {
             Options o = new Options();
+            if (mode.equals("fortresses")) {
+                o.centerX = 9_500_000;
+                o.radius = 500_000;
+                o.minDist = 9_000_000;
+            }
             try {
                 for (int i = 0; i < args.length; i++) {
                     switch (args[i]) {
@@ -445,6 +612,8 @@ public final class StructureFinder {
                         case "--top" -> o.top = Integer.parseInt(args[++i]);
                         case "--max-y" -> o.maxY = Integer.parseInt(args[++i]);
                         case "--min" -> o.minCount = Integer.parseInt(args[++i]);
+                        case "--min-dist" -> o.minDist = Integer.parseInt(args[++i]);
+                        case "--sample" -> o.sample = Integer.parseInt(args[++i]);
                         case "--details" -> o.details = true;
                         case "--large-biomes" -> o.worldType = "large_biomes";
                         case "--amplified" -> o.worldType = "amplified";
@@ -476,6 +645,9 @@ public final class StructureFinder {
                           witch huts at or below a height (their real generated height)
                       ./mesafinder monuments <seed> [--min 3|4] [--radius 100000] [--center x,z] [--top 25] [--details]
                           spots where 3 (triple) or 4 (quad) monuments are within one AFK range
+
+                      ./mesafinder fortresses <seed> [--center 9500000,0] [--radius 500000] [--min-dist 9000000] [--top 25]
+                          biggest nether fortresses (nether coords); --min-dist = at least this far out on x or z
 
                       --large-biomes / --amplified   world type, if not normal
                     """);

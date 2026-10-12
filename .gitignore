@@ -2,3 +2,4 @@ lib/
 build/
 *.png
 *-smp-*.txt
+fortress-smp-*.txt

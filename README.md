@@ -38,6 +38,14 @@ Speed: radius 20000 (1.5M checks) takes about 8 s.
 Both use the game's own structure placement and biome checks. A witch hut's height is the average ground
 height over its 7x9 footprint (same rule as the game), so huts over big cave openings can generate deep
 underground. Checked against a real server: 6/6 huts at the exact floor height, including one at y -53.
+```bash
+./mesafinder fortresses <seed> --center 9500000,0 --radius 500000 --min-dist 9000000
+```
+
+Biggest nether fortresses (nether coordinates), ranked by floor area of the fortress pieces (where wither
+skeletons spawn). Copies the game's fortress-or-bastion pick for each spot, including bastions that fall back
+to a fortress in basalt deltas. Checked against a real server: 19/19 spots right (kind and position).
+
 Options: `--radius` (default 100000), `--center x,z`, `--top`, `--details` (monument centres).
 
 Output lists each area's centre (always inside the biome), box size, area, distance, and the share of

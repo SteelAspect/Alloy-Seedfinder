@@ -48,7 +48,7 @@ public final class MesaFinder {
     private static final List<String> MESA = List.of("badlands", "eroded_badlands", "wooded_badlands");
 
     public static void main(String[] args) throws Exception {
-        if (args.length > 0 && (args[0].equals("huts") || args[0].equals("monuments"))) {
+        if (args.length > 0 && (args[0].equals("huts") || args[0].equals("monuments") || args[0].equals("fortresses"))) {
             StructureFinder.run(args[0], Arrays.copyOfRange(args, 1, args.length));
             return;
         }
