@@ -28,5 +28,17 @@ First run copies the Minecraft 1.21.11 jars from your Gradle/Loom cache into `li
 
 Speed: radius 20000 (1.5M checks) takes about 8 s.
 
+## Witch huts and ocean monuments
+
+```bash
+./mesafinder huts <seed> --max-y -50          # huts at or below y -50, with their real height
+./mesafinder monuments <seed> --min 3          # triple (3) or quad (4) monument AFK spots
+```
+
+Both use the game's own structure placement and biome checks. A witch hut's height is the average ground
+height over its 7x9 footprint (same rule as the game), so huts over big cave openings can generate deep
+underground. Checked against a real server: 6/6 huts at the exact floor height, including one at y -53.
+Options: `--radius` (default 100000), `--center x,z`, `--top`, `--details` (monument centres).
+
 Output lists each area's centre (always inside the biome), box size, area, distance, and the share of
 plain / eroded (spikes) / wooded badlands. The map shows matches in orange with rank numbers.

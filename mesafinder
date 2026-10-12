@@ -23,10 +23,10 @@ if [ ! -f "$LIB/.ready" ]; then
   touch "$LIB/.ready"
 fi
 
-SRC="$DIR/src/dev/steelaspect/mesafinder/MesaFinder.java"
-if [ ! -f "$OUT/.built" ] || [ "$SRC" -nt "$OUT/.built" ]; then
+SRC=("$DIR"/src/dev/steelaspect/mesafinder/*.java)
+if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" -name '*.java' -newer "$OUT/.built")" ]; then
   rm -rf "$OUT" && mkdir -p "$OUT"
-  "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*" "$SRC"
+  "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*" "${SRC[@]}"
   touch "$OUT/.built"
 fi
 
