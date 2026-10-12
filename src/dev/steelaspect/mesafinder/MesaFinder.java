@@ -44,6 +44,7 @@ public final class MesaFinder {
     // Captured before Bootstrap wraps System.out with the game logger.
     private static final PrintStream OUT = System.out;
     private static final int SEA_LEVEL = 62;
+    private static final int MAX_MAP = 4000;
     private static final List<String> MESA = List.of("badlands", "eroded_badlands", "wooded_badlands");
 
     public static void main(String[] args) throws Exception {
@@ -240,13 +241,22 @@ public final class MesaFinder {
     }
 
     private static void writeMap(String[] grid, int n, int x0, int z0, List<Area> areas, Options o) throws Exception {
+        // Small searches are blown up to ~1200 px; huge ones are shrunk to at most 4000 px (a match anywhere
+        // in a shrunk pixel still shows, so small mesas don't vanish).
         int scale = Math.max(1, 1200 / n);
-        int size = n * scale;
+        int skip = Math.max(1, (n + MAX_MAP - 1) / MAX_MAP);
+        int cells = (n + skip - 1) / skip;
+        int size = cells * scale;
         BufferedImage img = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
         Set<String> wanted = new LinkedHashSet<>(o.biomes);
-        for (int row = 0; row < n; row++) {
-            for (int col = 0; col < n; col++) {
-                String b = grid[row * n + col];
+        for (int row = 0; row < cells; row++) {
+            for (int col = 0; col < cells; col++) {
+                String b = grid[(row * skip) * n + col * skip];
+                for (int dy = 0; dy < skip && row * skip + dy < n; dy++)
+                    for (int dx = 0; dx < skip && col * skip + dx < n; dx++) {
+                        String c = grid[(row * skip + dy) * n + col * skip + dx];
+                        if (wanted.contains(c)) b = c;
+                    }
                 int rgb = wanted.contains(b) ? highlight(b) : dim(colour(b));
                 for (int dy = 0; dy < scale; dy++)
                     for (int dx = 0; dx < scale; dx++) img.setRGB(col * scale + dx, row * scale + dy, rgb);
@@ -255,10 +265,10 @@ public final class MesaFinder {
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        double px = (double) scale / o.step; // pixels per block
+        double px = (double) scale / (o.step * skip); // pixels per block
 
         // Grid line every 1000 blocks (5000 for big maps), with labels.
-        int every = o.radius > 15000 ? 5000 : 1000;
+        int every = o.radius > 100000 ? 50000 : o.radius > 15000 ? 5000 : 1000;
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
         g.setColor(new Color(255, 255, 255, 40));
         for (int b = Math.floorDiv(x0, every) * every; b <= x0 + n * o.step; b += every) {

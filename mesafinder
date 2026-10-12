@@ -30,4 +30,4 @@ if [ ! -f "$OUT/.built" ] || [ "$SRC" -nt "$OUT/.built" ]; then
   touch "$OUT/.built"
 fi
 
-exec "$JAVA_HOME/bin/java" -Xmx4G -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"
+exec "$JAVA_HOME/bin/java" -Xmx8G -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"
