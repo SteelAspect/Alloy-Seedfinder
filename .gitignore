@@ -3,3 +3,7 @@ build/
 *.png
 *-smp-*.txt
 fortress-smp-*.txt
+far/
+far.sh
+far2/
+far2.sh

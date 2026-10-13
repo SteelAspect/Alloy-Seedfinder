@@ -30,4 +30,4 @@ if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" -name '*.java' -newer "$OUT
   touch "$OUT/.built"
 fi
 
-exec "$JAVA_HOME/bin/java" -Xmx8G -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"
+exec "$JAVA_HOME/bin/java" -Xmx${MESA_XMX:-8G} -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"

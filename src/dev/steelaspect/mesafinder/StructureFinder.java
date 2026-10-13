@@ -74,6 +74,10 @@ public final class StructureFinder {
     /** Monuments further apart than this (centre to centre) can't share one AFK spot. */
     private static final int MONUMENT_PAIR_MAX = 340;
     private static final double AFK_RANGE = 128;
+    private static final Object FORTRESS_LOCK = new Object();
+    private static final int KEEP = 300;
+    /** The world's hard limit (the default world border). */
+    private static final int WORLD_EDGE = 29_999_983;
     /** A hut whose 9-spot guess is within this of the limit gets its exact height worked out. */
     private static final int QUICK_MARGIN = 60;
     private static final int[] PREFILTER_Y = {64, 96, 32, 0, -32, -60};
@@ -434,7 +438,7 @@ public final class StructureFinder {
 
     // ---------------------------------------------------------------- nether fortresses
 
-    record Fortress(int x, int z, int pieces, int spawners, int wartRooms, long pieceArea, BoundingBox box, List<BoundingBox> parts) {}
+    record Fortress(int x, int z, int pieces, int spawners, int wartRooms, long pieceArea, BoundingBox box, List<BoundingBox> parts, long volume) {}
 
     private void fortresses() {
         RandomSpreadStructurePlacement placement = placement(BuiltinStructureSets.NETHER_COMPLEXES);
@@ -447,7 +451,8 @@ public final class StructureFinder {
         OUT.printf(Locale.ROOT, "Seed %d, nether, searching %d blocks around %d, %d for fortresses at least %,d out (%,d possible spots)%n",
                 o.seed, o.radius, o.centerX, o.centerZ, o.minDist, (long) rows * (r[3] - r[2] + 1));
         long start = System.nanoTime();
-        List<Fortress> found = Collections.synchronizedList(new ArrayList<>());
+        java.util.PriorityQueue<Fortress> best = new java.util.PriorityQueue<>(java.util.Comparator.comparingLong(Fortress::pieceArea));
+        AtomicInteger count = new AtomicInteger();
         AtomicInteger done = new AtomicInteger(), last = new AtomicInteger(-1);
         IntStream.rangeClosed(r[0], r[1]).parallel().forEach(rx -> {
             for (int rz = r[2]; rz <= r[3]; rz++) {
@@ -459,9 +464,17 @@ public final class StructureFinder {
                 WorldgenRandom pick = new WorldgenRandom(new LegacyRandomSource(0L));
                 pick.setLargeFeatureSeed(o.seed, chunk.x, chunk.z);
                 if (pick.nextInt(5) >= 2 && bastionFits(chunk, starts, bastion)) continue;
-                StructureStart s = fortress.value().generate(fortress, Level.NETHER, null, generator, source, random, null, o.seed,
-                        chunk, 0, heights, b -> fortress.value().biomes().contains(b));
+                StructureStart s;
+                // Fortress pieces share static counters (NetherFortressPieces.PieceWeight.placeCount), so two
+                // fortresses built at the same time corrupt each other's size. Build them one at a time.
+                synchronized (FORTRESS_LOCK) {
+                    s = fortress.value().generate(fortress, Level.NETHER, null, generator, source, random, null, o.seed,
+                            chunk, 0, heights, b -> fortress.value().biomes().contains(b));
+                }
                 if (!s.isValid()) continue;
+                BoundingBox all = s.getBoundingBox();
+                if (Math.max(Math.max(Math.abs(all.minX()), Math.abs(all.maxX())), Math.max(Math.abs(all.minZ()), Math.abs(all.maxZ()))) > WORLD_EDGE)
+                    continue; // sticks out past the edge of the world
                 int spawners = 0, warts = 0;
                 long area = 0;
                 List<BoundingBox> parts = new ArrayList<>();
@@ -473,7 +486,14 @@ public final class StructureFinder {
                     parts.add(b);
                     area += (long) b.getXSpan() * b.getZSpan();
                 }
-                found.add(new Fortress(x, z, s.getPieces().size(), spawners, warts, area, s.getBoundingBox(), parts));
+                count.incrementAndGet();
+                synchronized (best) {
+                    // Keep only the biggest few (with their pieces) so memory stays small.
+                    if (best.size() < KEEP || area > best.peek().pieceArea) {
+                        best.add(new Fortress(x, z, s.getPieces().size(), spawners, warts, area, s.getBoundingBox(), parts, 0));
+                        if (best.size() > KEEP) best.poll();
+                    }
+                }
             }
             progress(done, rows, last);
         });
@@ -491,31 +511,45 @@ public final class StructureFinder {
                     OUT.println("SAMPLE " + c.getMinBlockX() + " " + c.getMinBlockZ() + " " + (bastionHere ? "bastion_remnant" : "fortress"));
                 }
         }
-        List<Fortress> list = new ArrayList<>(found);
+        List<Fortress> list = new ArrayList<>(best);
         // Rank by real floor area (overlapping pieces counted once) for the top candidates.
         list.sort((a, b) -> Long.compare(b.pieceArea, a.pieceArea));
         List<Fortress> top = new ArrayList<>();
         for (Fortress f : list.subList(0, Math.min(300, list.size())))
-            top.add(new Fortress(f.x, f.z, f.pieces, f.spawners, f.wartRooms, unionArea(f.parts, f.box), f.box, f.parts));
+            top.add(new Fortress(f.x, f.z, f.pieces, f.spawners, f.wartRooms, unionArea(f.parts, f.box), f.box, f.parts, unionVolume(f.parts, f.box)));
         top.sort((a, b) -> Long.compare(b.pieceArea, a.pieceArea));
-        OUT.printf(Locale.ROOT, "\r  done in %.1f s, %,d fortresses in the area%n%n", (System.nanoTime() - start) / 1e9, list.size());
+        OUT.printf(Locale.ROOT, "\r  done in %.1f s, %,d fortresses in the area%n%n", (System.nanoTime() - start) / 1e9, count.get());
         if (top.isEmpty()) {
             OUT.println("No fortresses found there.");
             return;
         }
-        OUT.printf(Locale.ROOT, "Biggest fortresses (nether coords):%n%n%-4s %-24s %-11s %-10s %-7s %-9s %-6s %s%n",
-                "#", "Centre (x, y, z)", "Box (x by z)", "Floor area", "Pieces", "Spawners", "Wart", "Overworld (x8)");
+        OUT.printf(Locale.ROOT, "Biggest fortresses (nether coords):%n%n%-4s %-20s %-11s %-10s %-16s %-10s %s%n",
+                "#", "Centre (x, z)", "Box (x by z)", "Floor area", "Height (y to y)", "Volume", "Overworld (x8)");
         for (int i = 0; i < Math.min(o.top, top.size()); i++) {
             Fortress f = top.get(i);
             int cx = (f.box.minX() + f.box.maxX()) / 2, cz = (f.box.minZ() + f.box.maxZ()) / 2;
-            OUT.printf(Locale.ROOT, "%-4d %-24s %-11s %-10s %-7d %-9d %-6d %s%n", i + 1,
-                    cx + ", " + f.box.minY() + ", " + cz, f.box.getXSpan() + "x" + f.box.getZSpan(), String.format(Locale.ROOT, "%,d", f.pieceArea),
-                    f.pieces, f.spawners, f.wartRooms, String.format(Locale.ROOT, "%,d, %,d", (long) cx * 8, (long) cz * 8));
+            OUT.printf(Locale.ROOT, "%-4d %-20s %-11s %-10s %-16s %-10s %s%n", i + 1,
+                    cx + ", " + cz, f.box.getXSpan() + "x" + f.box.getZSpan(), String.format(Locale.ROOT, "%,d", f.pieceArea),
+                    f.box.getYSpan() + " (" + f.box.minY() + " to " + f.box.maxY() + ")", String.format(Locale.ROOT, "%,d", f.volume),
+                    String.format(Locale.ROOT, "%,d, %,d", (long) cx * 8, (long) cz * 8));
         }
         if (o.details) for (int i = 0; i < Math.min(o.top, top.size()); i++)
             OUT.println("#" + (i + 1) + " start chunk corner: " + top.get(i).x + ", " + top.get(i).z);
         OUT.println("\nFloor area = blocks covered by fortress pieces (where wither skeletons can spawn), overlaps counted once.");
-        OUT.println("y = bottom of the fortress. Teleport in the nether: /execute in minecraft:the_nether run tp @s <x> <y + 10> <z>");
+        OUT.println("Height = from the lowest to the highest block of the fortress. Volume = blocks inside fortress pieces.");
+        OUT.println("Teleport in the nether: /execute in minecraft:the_nether run tp @s <x> <bottom y + 10> <z>");
+    }
+
+    /** Blocks inside fortress pieces (3D), overlaps counted once. */
+    private static long unionVolume(List<BoundingBox> parts, BoundingBox all) {
+        int w = all.getXSpan(), h = all.getYSpan(), l = all.getZSpan();
+        java.util.BitSet cells = new java.util.BitSet(w * h * l);
+        for (BoundingBox b : parts)
+            for (int x = b.minX(); x <= b.maxX(); x++)
+                for (int y = b.minY(); y <= b.maxY(); y++)
+                    for (int z = b.minZ(); z <= b.maxZ(); z++)
+                        cells.set(((x - all.minX()) * h + (y - all.minY())) * l + (z - all.minZ()));
+        return cells.cardinality();
     }
 
     private static long unionArea(List<BoundingBox> parts, BoundingBox all) {
