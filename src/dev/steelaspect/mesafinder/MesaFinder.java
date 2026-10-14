@@ -111,6 +111,16 @@ public final class MesaFinder {
         });
         OUT.printf(Locale.ROOT, "\r  done in %.1f s%n%n", (System.nanoTime() - start) / 1e9);
 
+        if (o.square) {
+            BiomeAt at = (x, z) -> {
+                int y = nether ? 64 : Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
+                Holder<Biome> biome = source.getNoiseBiome(QuartPos.fromBlock(x), QuartPos.fromBlock(y), QuartPos.fromBlock(z), sampler);
+                return names.computeIfAbsent(biome, h -> h.unwrapKey().map(k -> k.identifier().getPath()).orElse("unknown"));
+            };
+            SolidAreas.run(grid, n, x0, z0, o, at, OUT);
+            return;
+        }
+
         List<Area> areas = findAreas(grid, n, x0, z0, o);
         areas.sort((a, b) -> Long.compare(b.cells, a.cells));
         long minCells = (long) o.minSize * o.minSize / ((long) o.step * o.step);
@@ -123,6 +133,11 @@ public final class MesaFinder {
             writeMap(grid, n, x0, z0, areas, o);
             OUT.println("\nMap saved to " + new File(o.mapFile).getAbsolutePath());
         }
+    }
+
+    /** The biome at a block (x, z), at the height the search uses. */
+    interface BiomeAt {
+        String at(int x, int z);
     }
 
     /** One connected patch of matching biome. */
@@ -398,6 +413,7 @@ public final class MesaFinder {
         String worldType = "overworld";
         String worldName = "normal";
         boolean separate;
+        boolean square;
         boolean biomesSet;
         String mapFile;
         boolean noMap;
@@ -433,6 +449,10 @@ public final class MesaFinder {
                             o.separate = true;
                         }
                         case "--separate" -> o.separate = true;
+                        case "--square" -> {
+                            o.square = true;
+                            o.separate = true;
+                        }
                         case "--biome", "--biomes" -> {
                             o.biomesSet = true;
                             o.biomes = new ArrayList<>(Arrays.stream(args[++i].split(","))
@@ -506,6 +526,7 @@ public final class MesaFinder {
                       --amplified           the world uses the Amplified world type
                       --nether              search the nether (default: all 5 nether biomes, each biome its own area)
                       --separate            count each biome as its own area instead of joining them
+                      --square              biggest SOLID square and rectangle of each biome (no gaps), exact to 4 blocks
                       --map <file.png>      where to save the map picture (default mesa-<seed>.png)
                       --no-map              don't save a map picture
 
