@@ -73,12 +73,16 @@ public final class MesaFinder {
         ResourceKey<NoiseGeneratorSettings> worldType = switch (o.worldType) {
             case "large_biomes" -> NoiseGeneratorSettings.LARGE_BIOMES;
             case "amplified" -> NoiseGeneratorSettings.AMPLIFIED;
+            case "nether" -> NoiseGeneratorSettings.NETHER;
             default -> NoiseGeneratorSettings.OVERWORLD;
         };
+        boolean nether = o.worldType.equals("nether");
         RandomState random = RandomState.create(lookup, worldType, o.seed);
         MultiNoiseBiomeSource source = MultiNoiseBiomeSource.createFromPreset(
                 lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
-                        .getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD));
+                        .getOrThrow(nether ? MultiNoiseBiomeSourceParameterLists.NETHER : MultiNoiseBiomeSourceParameterLists.OVERWORLD));
+        // One shared name string per biome, so a huge grid only holds references.
+        Map<Holder<Biome>, String> names = new java.util.concurrent.ConcurrentHashMap<>();
         Climate.Sampler sampler = random.sampler();
         DensityFunction surface = random.router().preliminarySurfaceLevel();
 
@@ -97,9 +101,10 @@ public final class MesaFinder {
             for (int col = 0; col < n; col++) {
                 int x = x0 + col * o.step;
                 // Biome at the top block you'd see: land surface, or the water surface (sea level) over oceans and rivers.
-                int y = Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
+                // Nether biomes don't change with height.
+                int y = nether ? 64 : Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
                 Holder<Biome> biome = source.getNoiseBiome(QuartPos.fromBlock(x), QuartPos.fromBlock(y), QuartPos.fromBlock(z), sampler);
-                grid[row * n + col] = biome.unwrapKey().map(k -> k.identifier().getPath()).orElse("unknown");
+                grid[row * n + col] = names.computeIfAbsent(biome, h -> h.unwrapKey().map(k -> k.identifier().getPath()).orElse("unknown"));
             }
             int pct = rowsDone.incrementAndGet() * 100 / n;
             if (pct % 10 == 0 && lastPct.getAndSet(pct) != pct) OUT.print("\r  " + pct + "%");
@@ -112,6 +117,7 @@ public final class MesaFinder {
         areas.removeIf(a -> a.cells < Math.max(1, minCells));
 
         printTable(areas, o);
+        if (o.separate && o.biomes.size() > 1) printBestPerBiome(areas, o);
         if (o.sampleFile != null) writeSamples(grid, n, x0, z0, o);
         if (o.mapFile != null) {
             writeMap(grid, n, x0, z0, areas, o);
@@ -160,7 +166,7 @@ public final class MesaFinder {
                         int r2 = row + dr, c2 = col + dc;
                         if (r2 < 0 || c2 < 0 || r2 >= n || c2 >= n) continue;
                         int nb = r2 * n + c2;
-                        if (label[nb] == 0 && wanted.contains(grid[nb])) {
+                        if (label[nb] == 0 && (o.separate ? grid[nb].equals(grid[c]) : wanted.contains(grid[nb]))) {
                             label[nb] = id;
                             queue[tail++] = nb;
                         }
@@ -193,7 +199,8 @@ public final class MesaFinder {
         int shown = Math.min(o.top, areas.size());
         OUT.printf(Locale.ROOT, "Biggest %s areas (%d found, showing %d):%n%n", String.join(" + ", o.biomes), areas.size(), shown);
         StringBuilder head = new StringBuilder(String.format(Locale.ROOT, "%-3s %-16s %-13s %-12s %-9s", "#", "Centre (x, z)", "Box (x by z)", "Area", "Distance"));
-        boolean mixed = o.biomes.size() > 1;
+        boolean mixed = o.biomes.size() > 1 && !o.separate;
+        if (o.separate) head.append(" Biome");
         if (mixed) for (String b : o.biomes) head.append(String.format(Locale.ROOT, " %-8s", shortName(b)));
         OUT.println(head);
         for (int i = 0; i < shown; i++) {
@@ -204,6 +211,7 @@ public final class MesaFinder {
             String box = (a.maxX - a.minX + o.step) + "x" + (a.maxZ - a.minZ + o.step);
             StringBuilder line = new StringBuilder(String.format(Locale.ROOT, "%-3d %-16s %-13s %-12s %-9s",
                     a.rank, a.centerX + ", " + a.centerZ, box, formatArea(area) + (a.touchesEdge ? "+" : ""), dist));
+            if (o.separate) line.append(" ").append(a.perBiome.keySet().iterator().next());
             if (mixed) for (String b : o.biomes) {
                 long c = a.perBiome.getOrDefault(b, 0L);
                 line.append(String.format(Locale.ROOT, " %-8s", c * 100 / a.cells + "%"));
@@ -214,11 +222,28 @@ public final class MesaFinder {
         OUT.println("Teleport: /tp @s <x> ~ <z>   (the centre is always inside the biome)");
     }
 
+    private static void printBestPerBiome(List<Area> areas, Options o) {
+        OUT.println("\nBiggest of each biome:");
+        for (String b : o.biomes) {
+            areas.stream().filter(a -> a.perBiome.containsKey(b)).findFirst().ifPresentOrElse(
+                    a -> OUT.printf(Locale.ROOT, "  %-18s %-22s %s%n", b, a.centerX + ", " + a.centerZ, formatArea(a.cells * o.step * o.step) + (a.touchesEdge ? "+" : "")),
+                    () -> OUT.printf(Locale.ROOT, "  %-18s none%n", b));
+        }
+    }
+
     /** Test helper: random grid points with the biome we predicted, to compare against a real server. */
     private static void writeSamples(String[] grid, int n, int x0, int z0, Options o) throws Exception {
         java.util.Random r = new java.util.Random(o.seed);
         Set<String> wanted = new LinkedHashSet<>(o.biomes);
         try (PrintStream w = new PrintStream(o.sampleFile)) {
+            if (o.separate) {
+                // Every biome is wanted, so just take random points.
+                for (int k = 0; k < o.samples; k++) {
+                    int i = r.nextInt(grid.length);
+                    w.println((x0 + (i % n) * o.step) + " " + (z0 + (i / n) * o.step) + " " + grid[i]);
+                }
+                return;
+            }
             int mesa = 0, other = 0;
             while (mesa < o.samples / 2 || other < o.samples / 2) {
                 int i = r.nextInt(grid.length);
@@ -321,6 +346,11 @@ public final class MesaFinder {
             case "eroded_badlands" -> 0xFF5A1F;
             case "wooded_badlands" -> 0xC9A040;
             case "badlands" -> 0xF08A2C;
+            case "nether_wastes" -> 0x8A2A22;
+            case "crimson_forest" -> 0xE0342C;
+            case "warped_forest" -> 0x1FA59A;
+            case "soul_sand_valley" -> 0x9C7A55;
+            case "basalt_deltas" -> 0x6E6A70;
             default -> 0xFF3B3B;
         };
     }
@@ -367,6 +397,8 @@ public final class MesaFinder {
         List<String> biomes = new ArrayList<>(MESA);
         String worldType = "overworld";
         String worldName = "normal";
+        boolean separate;
+        boolean biomesSet;
         String mapFile;
         boolean noMap;
         String sampleFile;
@@ -395,8 +427,17 @@ public final class MesaFinder {
                         case "--step" -> o.step = Integer.parseInt(args[++i]);
                         case "--top" -> o.top = Integer.parseInt(args[++i]);
                         case "--min-size" -> o.minSize = Integer.parseInt(args[++i]);
-                        case "--biome", "--biomes" -> o.biomes = new ArrayList<>(Arrays.stream(args[++i].split(","))
-                                .map(s -> s.trim().toLowerCase(Locale.ROOT).replace("minecraft:", "")).filter(s -> !s.isEmpty()).toList());
+                        case "--nether" -> {
+                            o.worldType = "nether";
+                            o.worldName = "nether";
+                            o.separate = true;
+                        }
+                        case "--separate" -> o.separate = true;
+                        case "--biome", "--biomes" -> {
+                            o.biomesSet = true;
+                            o.biomes = new ArrayList<>(Arrays.stream(args[++i].split(","))
+                                    .map(s -> s.trim().toLowerCase(Locale.ROOT).replace("minecraft:", "")).filter(s -> !s.isEmpty()).toList());
+                        }
                         case "--large-biomes" -> {
                             o.worldType = "large_biomes";
                             o.worldName = "large biomes";
@@ -433,7 +474,9 @@ public final class MesaFinder {
                 System.err.println("--step must be at least 4 and --radius at least --step.");
                 System.exit(2);
             }
-            if (!o.noMap && o.mapFile == null) o.mapFile = "mesa-" + o.seed + ".png";
+            if (o.worldType.equals("nether") && !o.biomesSet)
+                o.biomes = new ArrayList<>(List.of("nether_wastes", "crimson_forest", "warped_forest", "soul_sand_valley", "basalt_deltas"));
+            if (!o.noMap && o.mapFile == null) o.mapFile = (o.worldType.equals("nether") ? "nether-" : "mesa-") + o.seed + ".png";
             if (o.noMap) o.mapFile = null;
             return o;
         }
@@ -461,6 +504,8 @@ public final class MesaFinder {
                       --biomes <a,b,...>    biomes to look for (default badlands,eroded_badlands,wooded_badlands)
                       --large-biomes        the world uses the Large Biomes world type
                       --amplified           the world uses the Amplified world type
+                      --nether              search the nether (default: all 5 nether biomes, each biome its own area)
+                      --separate            count each biome as its own area instead of joining them
                       --map <file.png>      where to save the map picture (default mesa-<seed>.png)
                       --no-map              don't save a map picture
 
