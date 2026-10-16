@@ -44,6 +44,18 @@ public final class Icons {
         switch (name) {
             case "mountain" -> g.draw(path(1, 13, 6, 5, 9, 9, 11, 6, 15, 13, 1, 13));
             case "square" -> g.draw(new RoundRectangle2D.Float(2.5f, 2.5f, 11, 11, 2, 2));
+            case "slime" -> {
+                g.draw(new RoundRectangle2D.Float(2.5f, 3.5f, 11, 10, 3, 3));
+                g.fill(new java.awt.geom.Rectangle2D.Float(5, 7, 2, 2));
+                g.fill(new java.awt.geom.Rectangle2D.Float(9, 7, 2, 2));
+                g.draw(path(6.5f, 11, 9.5f, 11));
+            }
+            case "list" -> {
+                for (int i = 0; i < 3; i++) {
+                    g.fill(new Ellipse2D.Float(2, 3.2f + i * 4, 2.2f, 2.2f));
+                    g.draw(path(6, 4.3f + i * 4, 14, 4.3f + i * 4));
+                }
+            }
             case "hut" -> {
                 g.draw(path(2, 8, 8, 3, 14, 8));
                 g.draw(path(4, 7, 4, 13, 12, 13, 12, 7));

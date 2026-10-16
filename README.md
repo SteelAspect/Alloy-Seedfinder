@@ -11,7 +11,9 @@ end cities). Positions use the game's own placement code and biome checks (check
 
 Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
 huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots, up to
-the whole world · nether biomes · biggest nether fortresses (floor area, height, volume).
+the whole world · slime farm AFK spots · nether biomes · biggest nether fortresses (floor area, height, volume).
+The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
+coordinates.
 
 App: dark theme, saved seeds, zoomable biome map with numbered pins, Copy /tp, waypoints to Xaero's minimap
 or `/cway add` commands, CSV and map image export, saved results, and a Speed setting (Fast / Balanced / Light).
@@ -50,6 +52,13 @@ by the exact number of guardian spawning blocks in range (more than 24 and at mo
 NaturalSpawner). Regions are scanned in tiles with just the placement maths, only monuments with close neighbours
 get the game's biome check (read point by point, stopping at the first failure), and triples/quads try every block
 for the AFK spot. Whole world, triples, Balanced: about 3 minutes.
+
+Slime farms: spots are ranked by the exact number of blocks a slime can spawn in within range (slime chunk from
+WorldgenRandom.seedSlimeChunk, y -64 to 39, 24 to 128 blocks away, and a biome whose monster list has slimes, looked
+up per block with the game's BiomeManager, so deep dark and mushroom fields don't count). Every chunk is scored by
+slime chunks within 8 chunks, the best 300 are climbed to the best block and height, the best 60 recounted with
+biomes. Counts match a plain loop over every block (12/12 spots); the #1 spot matches trying every 4th block over
+20k x 20k on two seeds. 400k x 400k: 13 s, 2M x 2M: 87 s (Balanced).
 
 Gotchas: fortress pieces share static counters in Minecraft's code (FortressBuilder gives each fortress its own).
 The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection, and

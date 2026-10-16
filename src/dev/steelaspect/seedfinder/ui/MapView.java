@@ -3,6 +3,7 @@ package dev.steelaspect.seedfinder.ui;
 import dev.steelaspect.seedfinder.engine.Dim;
 import dev.steelaspect.seedfinder.engine.Fmt;
 import dev.steelaspect.seedfinder.engine.Result;
+import dev.steelaspect.seedfinder.engine.SlimeSearch;
 import dev.steelaspect.seedfinder.engine.StructureLayers;
 import dev.steelaspect.seedfinder.engine.WorldGen;
 import dev.steelaspect.seedfinder.engine.WorldType;
@@ -74,6 +75,10 @@ public final class MapView extends JComponent {
     private java.util.function.Consumer<String> onStatus = s -> {};
     private volatile int generation;
     private final Timer repaintSoon = new Timer(80, e -> repaint());
+
+    // Chunk overlays: slime chunks (overworld) and a chunk grid, drawn when zoomed in enough to see chunks.
+    private static final int SLIME_MAX_BPP = 4, GRID_MAX_BPP = 2;
+    private volatile boolean slimeChunks, chunkGrid;
 
     // Structure icons (the Map page). Icons are worked out per 4096-block cell, only for what's on screen.
     private static final int ICON_CELL = 4096;
@@ -151,7 +156,8 @@ public final class MapView extends JComponent {
             @Override
             public void mouseMoved(MouseEvent e) {
                 int bx = (int) Math.floor(blockX(e.getX())), bz = (int) Math.floor(blockZ(e.getY()));
-                hoverText = bx + ", " + bz;
+                String where = bx + ", " + bz + "  ·  chunk " + Math.floorDiv(bx, 16) + ", " + Math.floorDiv(bz, 16);
+                hoverText = where;
                 setCursor(Cursor.getPredefinedCursor(iconAt(e.getX(), e.getY()) != null || pinAt(e.getX(), e.getY()) >= 0
                         ? Cursor.HAND_CURSOR : Cursor.CROSSHAIR_CURSOR));
                 repaint();
@@ -163,7 +169,7 @@ public final class MapView extends JComponent {
                     String b = WorldGen.of(v.seed(), v.dim(), v.type()).mapBiomeAt(bx, bz);
                     SwingUtilities.invokeLater(() -> {
                         if (seq != hoverSeq.get()) return;
-                        hoverText = bx + ", " + bz + "  ·  " + Fmt.biome(b);
+                        hoverText = where + "  ·  " + Fmt.biome(b);
                         repaint();
                     });
                 });
@@ -177,6 +183,17 @@ public final class MapView extends JComponent {
         addMouseListener(m);
         addMouseMotionListener(m);
         addMouseWheelListener(m);
+    }
+
+    /** Shades slime chunks (overworld only). */
+    public void setSlimeChunks(boolean on) {
+        slimeChunks = on;
+        repaint();
+    }
+
+    public void setChunkGrid(boolean on) {
+        chunkGrid = on;
+        repaint();
     }
 
     /** Structure layers to draw (the Map page). */
@@ -312,10 +329,22 @@ public final class MapView extends JComponent {
         TileRenderer.Spec v = view;
         Thread t = new Thread(() -> {
             String b = WorldGen.of(v.seed(), v.dim(), v.type()).biomeAt(bx, bz);
-            SwingUtilities.invokeLater(() -> onStatus.accept(bx + ", " + bz + ": " + Fmt.biome(b)));
+            SwingUtilities.invokeLater(() -> onStatus.accept(describe(v.dim(), bx, bz, b)));
         }, "map-biome-at");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** "x, z: Biome · chunk · region file · the other dimension's coordinates" for a clicked block. */
+    static String describe(Dim dim, int x, int z, String biome) {
+        int cx = Math.floorDiv(x, 16), cz = Math.floorDiv(z, 16);
+        String other = switch (dim) {
+            case OVERWORLD -> "  ·  Nether " + Math.floorDiv(x, 8) + ", " + Math.floorDiv(z, 8);
+            case NETHER -> "  ·  Overworld " + x * 8 + ", " + z * 8;
+            case END -> "";
+        };
+        return x + ", " + z + ": " + Fmt.biome(biome) + "  ·  chunk " + cx + ", " + cz
+                + "  ·  r." + Math.floorDiv(cx, 32) + "." + Math.floorDiv(cz, 32) + ".mca" + other;
     }
 
     private int pinAt(int px, int py) {
@@ -339,6 +368,8 @@ public final class MapView extends JComponent {
         g2.fillRect(0, 0, w, h);
         if (view != null) paintTiles(g2, w, h);
         double bpp = bpp();
+        List<String> hidden = new ArrayList<>();
+        paintChunks(g2, w, h, bpp, hidden);
         if (searchArea != null) {
             double x0 = (searchArea[0] - searchArea[2] - centerX) / bpp + w / 2.0, z0 = (searchArea[1] - searchArea[2] - centerZ) / bpp + h / 2.0;
             double size = searchArea[2] * 2.0 / bpp;
@@ -346,7 +377,7 @@ public final class MapView extends JComponent {
             g2.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1, new float[]{6, 5}, 0));
             g2.draw(new Rectangle((int) x0, (int) z0, (int) size, (int) size));
         }
-        List<String> hidden = paintIcons(g2, w, h, bpp);
+        hidden.addAll(paintIcons(g2, w, h, bpp));
         paintResults(g2, w, h, bpp);
         paintOverlay(g2, w, h, bpp);
         if (!hidden.isEmpty()) paintHint(g2, w, "Zoom in to see " + String.join(", ", hidden).toLowerCase());
@@ -493,6 +524,44 @@ public final class MapView extends JComponent {
                 }
         }
         return hidden;
+    }
+
+    /** Slime chunks and the chunk grid, for the chunks on screen (slime chunks are cheap: just the seed). */
+    private void paintChunks(Graphics2D g2, int w, int h, double bpp, List<String> hidden) {
+        TileRenderer.Spec v = view;
+        if (v == null) return;
+        boolean slime = slimeChunks && v.dim() == Dim.OVERWORLD, grid = chunkGrid;
+        if (slime && bpp > SLIME_MAX_BPP) {
+            hidden.add("Slime chunks");
+            slime = false;
+        }
+        if (grid && bpp > GRID_MAX_BPP) {
+            hidden.add("Chunk grid");
+            grid = false;
+        }
+        if (!slime && !grid) return;
+        int cx0 = Math.floorDiv((int) Math.floor(blockX(0)), 16), cx1 = Math.floorDiv((int) Math.floor(blockX(w)), 16);
+        int cz0 = Math.floorDiv((int) Math.floor(blockZ(0)), 16), cz1 = Math.floorDiv((int) Math.floor(blockZ(h)), 16);
+        double size = 16 / bpp;
+        Color fill = new Color(110, 220, 90, 95), edge = new Color(140, 240, 110, 190), line = new Color(255, 255, 255, 38);
+        g2.setStroke(new BasicStroke(1f));
+        for (int cx = cx0; cx <= cx1; cx++)
+            for (int cz = cz0; cz <= cz1; cz++) {
+                double x = (cx * 16.0 - centerX) / bpp + w / 2.0, z = (cz * 16.0 - centerZ) / bpp + h / 2.0;
+                java.awt.geom.Rectangle2D.Double r = new java.awt.geom.Rectangle2D.Double(x, z, size, size);
+                if (slime && SlimeSearch.isSlimeChunk(v.seed(), cx, cz)) {
+                    g2.setColor(fill);
+                    g2.fill(r);
+                    if (size >= 6) {
+                        g2.setColor(edge);
+                        g2.draw(r);
+                    }
+                }
+                if (grid) {
+                    g2.setColor(line);
+                    g2.draw(r);
+                }
+            }
     }
 
     private void requestIcons(String key, TileRenderer.Spec v, StructureLayers.Layer layer, long cx, long cz, boolean global) {

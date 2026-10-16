@@ -82,7 +82,7 @@ public final class SeedFinderApp {
 
         mapPage = new MapPage(this);
         add("map", mapPage);
-        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this),
+        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this),
                 new Pages.Nether(this), new Pages.Fortresses(this))) {
             p.build();
             searchPages.add(p);
@@ -101,6 +101,7 @@ public final class SeedFinderApp {
         sidebar.item("solid", "Solid areas", "square");
         sidebar.item("huts", "Witch huts", "hut");
         sidebar.item("monuments", "Monuments", "waves");
+        sidebar.item("slime", "Slime chunks", "slime");
         sidebar.section("Nether");
         sidebar.item("nether", "Nether biomes", "flame");
         sidebar.item("fortresses", "Fortresses", "castle");
@@ -465,8 +466,11 @@ public final class SeedFinderApp {
             frame.getContentPane().setSize(1380, 880);
             if (open != null) open(open);
             else if (page.startsWith("map:")) {
+                // map:<dim>[:<x>,<z>:<zoom level>]
+                String[] p = page.split(":");
                 show("map");
-                mapPage.switchTo(Dim.valueOf(page.substring(4).toUpperCase()));
+                mapPage.switchTo(Dim.valueOf(p[1].toUpperCase()));
+                if (p.length >= 4) mapPage.view(Integer.parseInt(p[2].split(",")[0]), Integer.parseInt(p[2].split(",")[1]), Integer.parseInt(p[3]));
             } else show(page.replace("search:", ""));
             frame.getContentPane().validate();
             if (page.startsWith("search:") && pages.get(page.substring(7)) instanceof SearchPage p) p.pressSearch();

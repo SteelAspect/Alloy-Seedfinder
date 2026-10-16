@@ -6,6 +6,7 @@ import dev.steelaspect.seedfinder.store.Settings;
 
 import javax.swing.BoxLayout;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
@@ -40,6 +41,7 @@ final class MapPage extends JPanel {
     private final JPanel layerList = Ui.clear(null);
     private final JTextField goTo = Ui.field("", 0);
     private final JLabel status = Ui.muted(" ");
+    private final JCheckBox slime = Ui.check("Slime chunks", false), grid = Ui.check("Chunk grid", false);
     private Dim dim = Dim.OVERWORLD;
     /** Where the view was in each dimension, so switching back returns there. */
     private final Map<Dim, int[]> views = new EnumMap<>(Dim.class);
@@ -113,7 +115,21 @@ final class MapPage extends JPanel {
         scroll.getViewport().setOpaque(false);
         scroll.setOpaque(false);
         side.add(scroll, BorderLayout.CENTER);
-        side.add(Ui.muted("<html>Positions use the game's own<br>placement and biome checks.</html>"), BorderLayout.SOUTH);
+        JLabel overlays = Ui.label("Overlays");
+        overlays.setFont(Theme.FONT_BOLD);
+        JPanel bottom = Ui.clear(null);
+        bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
+        for (JComponent c : new JComponent[]{overlays, slime, grid, Ui.muted("<html>Positions use the game's own<br>placement and biome checks.</html>")}) {
+            c.setAlignmentX(LEFT_ALIGNMENT);
+            bottom.add(c);
+            bottom.add(javax.swing.Box.createVerticalStrut(6));
+        }
+        for (JCheckBox c : new JCheckBox[]{slime, grid})
+            c.addActionListener(e -> {
+                applyLayers();
+                save();
+            });
+        side.add(bottom, BorderLayout.SOUTH);
 
         JPanel centre = Ui.clear(new BorderLayout(14, 0));
         centre.add(map, BorderLayout.CENTER);
@@ -146,6 +162,12 @@ final class MapPage extends JPanel {
         map.setZoomLevel(v[2]);
         shown();
         save();
+    }
+
+    /** Moves the view (screenshots). */
+    void view(int x, int z, int zoom) {
+        map.goTo(x, z);
+        map.setZoomLevel(zoom);
     }
 
     private void goTo() {
@@ -186,6 +208,9 @@ final class MapPage extends JPanel {
         layerList.revalidate();
         layerList.repaint();
         map.setLayers(on);
+        slime.setEnabled(dim == Dim.OVERWORLD);
+        map.setSlimeChunks(slime.isSelected());
+        map.setChunkGrid(grid.isSelected());
     }
 
     private void iconMenu(StructureLayers.Icon icon, java.awt.Point at) {
@@ -229,6 +254,8 @@ final class MapPage extends JPanel {
         StringBuilder off = new StringBuilder();
         for (var e : boxes.entrySet()) if (!e.getValue().isSelected()) off.append(e.getKey().name()).append(',');
         m.put("hidden", off.toString());
+        m.put("slime", Boolean.toString(slime.isSelected()));
+        m.put("grid", Boolean.toString(grid.isSelected()));
         app.settings().pages.put(ID, m);
         app.settings().save();
     }
@@ -238,6 +265,8 @@ final class MapPage extends JPanel {
         // The most common structures start off (they'd cover the map); everything else on.
         String off = m.getOrDefault("hidden", "TRIAL_CHAMBER,RUINED_PORTAL,SHIPWRECK,");
         for (var e : boxes.entrySet()) e.getValue().setSelected(!off.contains(e.getKey().name() + ","));
+        slime.setSelected(Boolean.parseBoolean(m.getOrDefault("slime", "false")));
+        grid.setSelected(Boolean.parseBoolean(m.getOrDefault("grid", "false")));
         try {
             dim = Dim.valueOf(m.getOrDefault("dim", "OVERWORLD"));
         } catch (IllegalArgumentException e) {

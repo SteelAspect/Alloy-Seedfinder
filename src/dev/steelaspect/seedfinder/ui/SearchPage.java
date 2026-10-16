@@ -173,9 +173,15 @@ public abstract class SearchPage extends JPanel {
         });
         add(split, BorderLayout.CENTER);
 
-        table.onSelect(i -> map.select(i));
+        table.onSelect(i -> {
+            map.select(i);
+            // Slime farms: zoom in far enough to see the chunks around the AFK spot.
+            List<Result> rs = table.results();
+            if (slimeChunks() && i >= 0 && i < rs.size()) map.centerOn(rs.get(i).x, rs.get(i).z, 160);
+        });
         map.onSelect(table::selectRow);
         map.onStatus(s -> setStatus(s, Theme.TEXT2));
+        map.setSlimeChunks(slimeChunks());
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -193,6 +199,11 @@ public abstract class SearchPage extends JPanel {
     protected abstract Dim dim();
 
     /** Biomes drawn bright on the map; the rest are greyed out. Empty = natural colours. */
+    /** Shade slime chunks on this page's map. */
+    protected boolean slimeChunks() {
+        return false;
+    }
+
     protected java.util.Set<String> highlight() {
         return java.util.Set.of();
     }

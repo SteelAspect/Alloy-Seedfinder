@@ -8,6 +8,7 @@ import dev.steelaspect.seedfinder.engine.MonumentSearch;
 import dev.steelaspect.seedfinder.engine.Progress;
 import dev.steelaspect.seedfinder.engine.Result;
 import dev.steelaspect.seedfinder.engine.Search;
+import dev.steelaspect.seedfinder.engine.SlimeSearch;
 import dev.steelaspect.seedfinder.engine.SolidSearch;
 import dev.steelaspect.seedfinder.engine.Fmt;
 import dev.steelaspect.seedfinder.store.Settings;
@@ -248,6 +249,34 @@ final class Pages {
             // Doubles are common (every few thousand blocks), so a huge search would just find millions of them.
             if (count == 2 && a.radius() > 1_000_000) throw new BadInput("Doubles are common: search 2M × 2M or less, or pick triple");
             return MonumentSearch.run(new MonumentSearch.Params(a, count, number("minDist", "the distance"), 50), progress);
+        }
+    }
+
+    // ------------------------------------------------------------------ slime chunks
+
+    static final class Slime extends SearchPage {
+        Slime(SeedFinderApp app) {
+            super(app, "slime", "Slime chunks", "Slime farm AFK spots with the most blocks slimes can spawn in (slime chunks below y 40, biomes checked)");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            areaFields(form, "40k × 40k");
+        }
+
+        @Override
+        protected boolean slimeChunks() {
+            return true;
+        }
+
+        @Override
+        protected Dim dim() {
+            return Dim.OVERWORLD;
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) {
+            return SlimeSearch.run(new SlimeSearch.Params(area(seed), 20), progress);
         }
     }
 
