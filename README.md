@@ -4,6 +4,11 @@ A desktop app (and command line) that finds the biggest biomes and the best stru
 **1.21.11** seed. It runs Minecraft's own world generator, so results match the real game; a **Verify** button
 checks them on a real server with the same seed.
 
+**Map** (the first page): a cubiomes-viewer style explorer for the Overworld, Nether and End, with the biome under
+the cursor, a go-to box and 16 switchable structure icon layers (villages, monuments, huts, outposts, mansions,
+temples, igloos, ancient cities, trial chambers, strongholds, ruined portals, shipwrecks, fortresses, bastions,
+end cities). Positions use the game's own placement code and biome checks (checked with /locate: 101/101).
+
 Tools: biggest biome areas (mesa by default) · biggest **solid** square/rectangle of a biome · witch huts below
 a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots · nether biomes ·
 biggest nether fortresses (floor area, height, volume).
@@ -33,8 +38,16 @@ with tiny-remapper, into the app's data folder. The converter libraries ship in 
 Code: `engine/` (searches, world generator access), `ui/` (Swing app), `launcher/` (Java check, first-run
 download and conversion, class loader), `verify/` (test server checks), `export/`, `store/`.
 
-Gotchas: fortress pieces share static counters in Minecraft's code, so fortresses are built one at a time.
-The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection.
+Speed: map tiles read biomes at a fixed height (y 64) with a cave fallback, draw a quick preview first, nearest
+tiles first, and are cached on disk (500 MB cap, Clear map cache in Settings). Biome and solid searches use two
+passes (fixed height everywhere, then exact lookups on candidates plus a 2-cell margin): about 2x faster with
+identical results (`--exact` skips the first pass). Fortresses are built on every core with private piece
+counters (`FortressBuilder`; `--serial-fortresses` is the old path), identical on 2000 compared fortresses.
+
+Gotchas: fortress pieces share static counters in Minecraft's code (FortressBuilder gives each fortress its own).
+The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection, and
+each structure gets a plain biome list. Minecraft breaks exact biome ties by lookup order (Climate.RTree's
+lastResult), so a handful of tie cells can differ between runs, as in the game itself.
 `seedfinder screenshot <file> [page|search:<page>]` draws the window to a PNG without showing it.
 
 ## Files
