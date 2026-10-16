@@ -223,8 +223,11 @@ public final class Verifier {
             case STRUCTURE -> {
                 out.add(new Check(nextId++, i, 0, r.dim, r.ref[0], r.ref[1], false,
                         in + "positioned " + r.ref[0] + " 64 " + r.ref[1] + " run locate structure " + r.structure, r.ref[0] + "," + r.ref[1]));
-                // End city ships: the elytra item frame hangs where we say.
-                if (r.ref.length >= 5)
+                // End city ships: the elytra item frame hangs where we say. Fortresses: the blaze spawner is there.
+                if (r.ref.length >= 5 && "minecraft:fortress".equals(r.structure))
+                    out.add(new Check(nextId++, i, 1, r.dim, r.ref[2], r.ref[4], true, in + "if block " + r.ref[2] + " " + r.ref[3] + " " + r.ref[4]
+                            + " minecraft:spawner run say SFV P %ID%", null));
+                else if (r.ref.length >= 5)
                     out.add(new Check(nextId++, i, 1, r.dim, r.ref[2], r.ref[4], true, in + "if entity @e[type=minecraft:item_frame,x=" + r.ref[2]
                             + ",y=" + r.ref[3] + ",z=" + r.ref[4] + ",dx=0,dy=0,dz=0,nbt={Item:{id:\"minecraft:elytra\"}}] run say SFV P %ID%", null));
             }

@@ -12,7 +12,8 @@ end cities). Positions use the game's own placement code and biome checks (check
 Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
 huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument and witch hut AFK
 spots (Quad finder), up to the whole world · slime farm AFK spots · nearest structures of a kind (village types,
-treasure bastions, end cities with a ship and where its elytra hangs) · nether biomes · biggest nether fortresses (floor area, height, volume).
+treasure bastions, blaze spawners, end cities with a ship and where its elytra hangs) · wither skeleton farm AFK
+spot for each fortress · nether biomes · biggest nether fortresses (floor area, height, volume).
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
 coordinates.
 

@@ -118,6 +118,14 @@ public final class FortressSearch {
             }
         });
         progress.update(0.98, "Measuring the biggest");
+        // Wither skeleton farms: fortress mobs spawn anywhere in the fortress's box on nether bricks
+        // (NaturalSpawner.isInNetherFortressBounds), so the best AFK spot covers the most of the box.
+        Map<Fortress, MonumentSearch.Spot> afk = new java.util.concurrent.ConcurrentHashMap<>();
+        new ArrayList<>(best).parallelStream().forEach(f -> {
+            MonumentSearch.Spot s = MonumentSearch.bestSpot(List.of(new MonumentSearch.Monument(0, 0,
+                    (f.box.minX() + f.box.maxX()) / 2, (f.box.minZ() + f.box.maxZ()) / 2, f.box)));
+            if (s != null) afk.put(f, s);
+        });
         List<Result> out = new ArrayList<>();
         for (Fortress f : best) {
             Result res = new Result();
@@ -138,6 +146,11 @@ public final class FortressSearch {
             res.details.put("Box", b.getXSpan() + "x" + b.getZSpan());
             res.details.put("Height", b.getYSpan() + " (y " + b.minY() + " to " + b.maxY() + ")");
             res.details.put("Volume", Fmt.n(unionVolume(f.parts, b)));
+            MonumentSearch.Spot s = afk.get(f);
+            if (s != null) {
+                res.details.put("Farm AFK spot", s.x() + ", " + s.y() + ", " + s.z());
+                res.details.put("Spawn blocks in range", Fmt.n(s.total()));
+            }
             res.details.put("Distance", Fmt.n(p.area().distance(res.x, res.z)));
             res.ref = new int[]{f.x, f.z};
             out.add(res);

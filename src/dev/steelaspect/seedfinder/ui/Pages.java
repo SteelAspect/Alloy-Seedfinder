@@ -344,7 +344,7 @@ final class Pages {
 
     static final class Fortresses extends SearchPage {
         Fortresses(SeedFinderApp app) {
-            super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area. Big searches take a few minutes (about 3 min per 1M × 1M).");
+            super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area, with the best wither skeleton farm AFK spot. About 3 min per 1M × 1M.");
         }
 
         @Override

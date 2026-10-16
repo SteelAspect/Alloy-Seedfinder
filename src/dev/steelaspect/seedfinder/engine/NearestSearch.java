@@ -40,6 +40,7 @@ public final class NearestSearch {
         RUINED_PORTAL("Ruined portals", StructureLayers.Layer.RUINED_PORTAL, null),
         SHIPWRECK("Shipwrecks", StructureLayers.Layer.SHIPWRECK, null),
         FORTRESS("Nether fortresses", StructureLayers.Layer.FORTRESS, null),
+        BLAZE_SPAWNER("Blaze spawners", StructureLayers.Layer.FORTRESS, null),
         BASTION("Bastions", StructureLayers.Layer.BASTION, null),
         BASTION_TREASURE("Treasure bastions", StructureLayers.Layer.BASTION, null),
         END_CITY("End cities", StructureLayers.Layer.END_CITY, null),
@@ -69,8 +70,11 @@ public final class NearestSearch {
     /** @param maxDistance stop searching this far from (centerX, centerZ) */
     public record Params(long seed, WorldType type, Target target, int centerX, int centerZ, int count, int maxDistance) {}
 
-    /** elytra: where the ship's elytra item frame goes, for Verify (end cities with a ship), else null. */
-    private record Hit(StructureLayers.Found found, ChunkPos chunk, long distance, String type, net.minecraft.core.BlockPos elytra) {}
+    /**
+     * mark: a block that matters inside the structure: where a ship's elytra item frame hangs, or a blaze spawner.
+     * The distance is to the mark when there is one.
+     */
+    private record Hit(StructureLayers.Found found, ChunkPos chunk, long distance, String type, net.minecraft.core.BlockPos mark) {}
 
     private static final Field TEMPLATE_NAME;
 
@@ -124,6 +128,10 @@ public final class NearestSearch {
                     if (Math.abs(chunk.getMinBlockX()) > Structures.WORLD_EDGE || Math.abs(chunk.getMinBlockZ()) > Structures.WORLD_EDGE) return;
                     StructureLayers.Found f = StructureLayers.at(w, t.layer, chunk);
                     if (f == null) return;
+                    if (t == Target.BLAZE_SPAWNER) {
+                        if (f.name().equals("fortress")) hits.addAll(spawners(w, f, chunk, p));
+                        return;
+                    }
                     Hit h = check(t, f, chunk, p);
                     if (h != null) hits.add(h);
                 });
@@ -191,6 +199,37 @@ public final class NearestSearch {
         }
     }
 
+    /**
+     * The blaze spawners of a fortress: each blaze room (MonsterThrone piece) places one at its (3, 5, 5). Pieces
+     * from FortressBuilder (the game's piece code with private counters, safe on any thread).
+     */
+    private static List<Hit> spawners(WorldGen w, StructureLayers.Found f, ChunkPos chunk, Params p) {
+        List<Hit> out = new ArrayList<>();
+        for (StructurePiece piece : FortressBuilder.build(w.seed, chunk)) {
+            if (!(piece instanceof net.minecraft.world.level.levelgen.structure.structures.NetherFortressPieces.MonsterThrone)) continue;
+            try {
+                net.minecraft.core.BlockPos pos = ((net.minecraft.core.BlockPos) WORLD_POS.invoke(piece, 3, 5, 5)).immutable();
+                long d = Math.round(Math.hypot((double) pos.getX() - p.centerX(), (double) pos.getZ() - p.centerZ()));
+                out.add(new Hit(f, chunk, d, null, pos));
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        return out;
+    }
+
+    /** StructurePiece.getWorldPos (the piece's local position in the world, as postProcess uses it). */
+    private static final java.lang.reflect.Method WORLD_POS;
+
+    static {
+        try {
+            WORLD_POS = StructurePiece.class.getDeclaredMethod("getWorldPos", int.class, int.class, int.class);
+            WORLD_POS.setAccessible(true);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static String templateName(TemplateStructurePiece piece) {
         try {
             return (String) TEMPLATE_NAME.get(piece);
@@ -201,15 +240,16 @@ public final class NearestSearch {
 
     private static Result result(Hit h, Params p) {
         Target t = p.target();
-        var pos = h.found.stub().position();
+        // Blaze spawners: the spawner itself is the place to go.
+        var pos = t == Target.BLAZE_SPAWNER ? h.mark.above() : h.found.stub().position().above();
         Result r = new Result();
         r.kind = Result.Kind.STRUCTURE;
         r.dim = t.dim();
-        r.name = Fmt.biome(h.found.name());
+        r.name = t == Target.BLAZE_SPAWNER ? "Blaze spawner" : Fmt.biome(h.found.name());
         r.structure = "minecraft:" + h.found.name();
         r.x = pos.getX();
         // A stronghold's spot is its chunk corner at y 0 (the rooms are placed later), so keep the player's height.
-        r.y = t.layer == StructureLayers.Layer.STRONGHOLD ? null : pos.getY() + 1;
+        r.y = t.layer == StructureLayers.Layer.STRONGHOLD ? null : pos.getY();
         r.z = pos.getZ();
         r.minX = r.x - 8;
         r.maxX = r.x + 8;
@@ -222,9 +262,9 @@ public final class NearestSearch {
         r.details.put("Chunk", h.chunk.x + ", " + h.chunk.z);
         if (t.dim() == Dim.OVERWORLD) r.details.put("Nether", Math.floorDiv(r.x, 8) + ", " + Math.floorDiv(r.z, 8));
         if (t.dim() == Dim.NETHER) r.details.put("Overworld", r.x * 8 + ", " + r.z * 8);
-        r.ref = h.elytra == null ? new int[]{h.chunk.getMinBlockX(), h.chunk.getMinBlockZ()}
-                : new int[]{h.chunk.getMinBlockX(), h.chunk.getMinBlockZ(), h.elytra.getX(), h.elytra.getY(), h.elytra.getZ()};
-        if (h.elytra != null) r.details.put("Elytra", h.elytra.getX() + ", " + h.elytra.getY() + ", " + h.elytra.getZ());
+        r.ref = h.mark == null ? new int[]{h.chunk.getMinBlockX(), h.chunk.getMinBlockZ()}
+                : new int[]{h.chunk.getMinBlockX(), h.chunk.getMinBlockZ(), h.mark.getX(), h.mark.getY(), h.mark.getZ()};
+        if (h.mark != null) r.details.put(t == Target.BLAZE_SPAWNER ? "Spawner" : "Elytra", h.mark.getX() + ", " + h.mark.getY() + ", " + h.mark.getZ());
         return r;
     }
 
