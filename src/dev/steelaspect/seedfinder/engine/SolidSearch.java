@@ -32,7 +32,7 @@ public final class SolidSearch {
     public static List<Result> run(Params p, Progress progress) {
         WorldGen world = WorldGen.of(p.area().seed(), p.dim(), p.area().type());
         progress.update(0, "Loading the world generator");
-        BiomeSearch.Grid g = BiomeSearch.sample(world, p.area(), p.step(), progress);
+        BiomeSearch.Grid g = BiomeSearch.sample(world, p.area(), p.step(), new java.util.HashSet<>(p.biomes()), progress);
         progress.update(0.9, "Finding solid squares");
         Map<String, List<Box>> squares = new HashMap<>(), rects = new HashMap<>();
         for (String b : p.biomes()) {

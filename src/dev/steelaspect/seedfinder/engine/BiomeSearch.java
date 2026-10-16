@@ -37,25 +37,63 @@ public final class BiomeSearch {
         return s;
     }
 
-    public static Grid sample(WorldGen world, Search area, int step, Progress progress) {
+    /** Set to true to skip the quick first pass (used to prove both ways give the same results). */
+    public static volatile boolean forceFullExact;
+
+    /** Biomes that change with height; the quick pass can't stand in for the exact one when these are wanted. */
+    private static final Set<String> CAVE_BIOMES = Set.of("lush_caves", "dripstone_caves", "deep_dark");
+    /** Cells around each candidate that also get the exact lookup. */
+    public static volatile int MARGIN = 2;
+
+    /**
+     * The biome grid, exact wherever a wanted biome is.
+     *
+     * <p>Two passes: first every cell at a fixed height (cheap, {@link WorldGen#mapBiomeAt}), then the exact surface
+     * lookup only for cells the first pass saw as a wanted biome. In the overworld only cave biomes depend on height,
+     * so a cell the exact lookup sees as a wanted surface biome always shows that biome in the quick pass too; the
+     * second pass only removes cells that are really caves. Cells that aren't wanted can't change any area, square
+     * or rectangle, so the results are the same as a fully exact grid.
+     */
+    public static Grid sample(WorldGen world, Search area, int step, Set<String> wanted, Progress progress) {
         int n = (int) (area.radius() * 2L / step + 1);
         int x0 = area.centerX() - (n / 2) * step, z0 = area.centerZ() - (n / 2) * step;
         String[] cells = new String[n * n];
+        boolean twoPass = !forceFullExact && world.dim == Dim.OVERWORLD && wanted.stream().noneMatch(CAVE_BIOMES::contains);
         AtomicInteger rows = new AtomicInteger();
         IntStream.range(0, n).parallel().forEach(row -> {
             progress.check();
             int z = z0 + row * step;
-            for (int col = 0; col < n; col++) cells[row * n + col] = world.biomeAt(x0 + col * step, z);
+            for (int col = 0; col < n; col++)
+                cells[row * n + col] = twoPass ? world.mapBiomeAt(x0 + col * step, z) : world.biomeAt(x0 + col * step, z);
             int done = rows.incrementAndGet();
-            if (done % Math.max(1, n / 100) == 0) progress.update(0.9 * done / n, "Checking biomes");
+            if (done % Math.max(1, n / 100) == 0) progress.update((twoPass ? 0.7 : 0.9) * done / n, "Checking biomes");
         });
+        if (twoPass) {
+            // Exact lookups for every candidate cell and a margin around it (edges of plateaus can differ by height).
+            java.util.BitSet near = new java.util.BitSet(cells.length);
+            for (int i = 0; i < cells.length; i++) {
+                if (!wanted.contains(cells[i])) continue;
+                int row = i / n, col = i % n;
+                for (int r = Math.max(0, row - MARGIN); r <= Math.min(n - 1, row + MARGIN); r++)
+                    near.set(r * n + Math.max(0, col - MARGIN), r * n + Math.min(n - 1, col + MARGIN) + 1);
+            }
+            rows.set(0);
+            IntStream.range(0, n).parallel().forEach(row -> {
+                progress.check();
+                int z = z0 + row * step;
+                for (int col = 0; col < n; col++)
+                    if (near.get(row * n + col)) cells[row * n + col] = world.biomeAt(x0 + col * step, z);
+                int done = rows.incrementAndGet();
+                if (done % Math.max(1, n / 100) == 0) progress.update(0.7 + 0.2 * done / n, "Checking candidates exactly");
+            });
+        }
         return new Grid(cells, n, x0, z0, step);
     }
 
     public static List<Result> run(Params p, Progress progress) {
         WorldGen world = WorldGen.of(p.area().seed(), p.dim(), p.area().type());
         progress.update(0, "Loading the world generator");
-        Grid g = sample(world, p.area(), p.step(), progress);
+        Grid g = sample(world, p.area(), p.step(), new HashSet<>(p.biomes()), progress);
         progress.update(0.92, "Finding areas");
         List<Result> results = areas(g, p);
         progress.update(1, "Done");
