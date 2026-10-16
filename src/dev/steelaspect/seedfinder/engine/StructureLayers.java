@@ -41,9 +41,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * structure's own check for a valid spot (including its biome check). Pieces aren't built, so it's quick.
  */
 public final class StructureLayers {
-    /** One kind of icon on the map. maxBlocksPerPixel: hide the layer when zoomed out further (too crowded). */
+    /**
+     * One kind of icon on the map. maxBlocksPerPixel: hide the layer when zoomed out further, so icons stay about
+     * 20+ px apart (trial chambers are in almost every 544-block region, mansions only every 1280).
+     */
     public enum Layer {
-        VILLAGE("Villages", Dim.OVERWORLD, BuiltinStructureSets.VILLAGES, null, 0xE6B45A, "house", 48),
+        VILLAGE("Villages", Dim.OVERWORLD, BuiltinStructureSets.VILLAGES, null, 0xE6B45A, "house", 32),
         MONUMENT("Ocean monuments", Dim.OVERWORLD, BuiltinStructureSets.OCEAN_MONUMENTS, null, 0x4FB6D8, "waves", 64),
         SWAMP_HUT("Witch huts", Dim.OVERWORLD, BuiltinStructureSets.SWAMP_HUTS, null, 0x7BC27B, "hut", 64),
         OUTPOST("Pillager outposts", Dim.OVERWORLD, BuiltinStructureSets.PILLAGER_OUTPOSTS, null, 0xB0B6C0, "flag", 64),
@@ -52,13 +55,13 @@ public final class StructureLayers {
         JUNGLE_TEMPLE("Jungle temples", Dim.OVERWORLD, BuiltinStructureSets.JUNGLE_TEMPLES, null, 0x5FA83C, "pyramid", 64),
         IGLOO("Igloos", Dim.OVERWORLD, BuiltinStructureSets.IGLOOS, null, 0xDCEBF5, "dome", 64),
         ANCIENT_CITY("Ancient cities", Dim.OVERWORLD, BuiltinStructureSets.ANCIENT_CITIES, null, 0x3FA9A0, "city", 64),
-        TRIAL_CHAMBER("Trial chambers", Dim.OVERWORLD, BuiltinStructureSets.TRIAL_CHAMBERS, null, 0xD98A4A, "trial", 64),
+        TRIAL_CHAMBER("Trial chambers", Dim.OVERWORLD, BuiltinStructureSets.TRIAL_CHAMBERS, null, 0xD98A4A, "trial", 16),
         STRONGHOLD("Strongholds", Dim.OVERWORLD, BuiltinStructureSets.STRONGHOLDS, null, 0x9D7CE0, "eye", 4096),
-        RUINED_PORTAL("Ruined portals", Dim.OVERWORLD, BuiltinStructureSets.RUINED_PORTALS, null, 0xB05CE0, "portal", 32),
-        SHIPWRECK("Shipwrecks", Dim.OVERWORLD, BuiltinStructureSets.SHIPWRECKS, null, 0xC8A070, "ship", 32),
-        FORTRESS("Fortresses", Dim.NETHER, BuiltinStructureSets.NETHER_COMPLEXES, "fortress", 0xE05A4A, "castle", 48),
-        BASTION("Bastions", Dim.NETHER, BuiltinStructureSets.NETHER_COMPLEXES, "bastion_remnant", 0x6B6B78, "tower", 48),
-        END_CITY("End cities", Dim.END, BuiltinStructureSets.END_CITIES, null, 0xE6D8A0, "tower", 64);
+        RUINED_PORTAL("Ruined portals", Dim.OVERWORLD, BuiltinStructureSets.RUINED_PORTALS, null, 0xB05CE0, "portal", 16),
+        SHIPWRECK("Shipwrecks", Dim.OVERWORLD, BuiltinStructureSets.SHIPWRECKS, null, 0xC8A070, "ship", 16),
+        FORTRESS("Fortresses", Dim.NETHER, BuiltinStructureSets.NETHER_COMPLEXES, "fortress", 0xE05A4A, "castle", 32),
+        BASTION("Bastions", Dim.NETHER, BuiltinStructureSets.NETHER_COMPLEXES, "bastion_remnant", 0x8C8C9A, "tower", 32),
+        END_CITY("End cities", Dim.END, BuiltinStructureSets.END_CITIES, null, 0xE6D8A0, "tower", 32);
 
         public final String label;
         public final Dim dim;

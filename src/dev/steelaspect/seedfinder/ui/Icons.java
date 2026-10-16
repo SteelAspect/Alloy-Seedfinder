@@ -147,6 +147,63 @@ public final class Icons {
                 g.draw(new Ellipse2D.Float(2.5f, 2.5f, 11, 11));
                 g.fill(new Ellipse2D.Float(6.5f, 6.5f, 3, 3));
             }
+            case "house" -> {
+                g.draw(path(2, 8, 8, 2.5f, 14, 8));
+                g.draw(path(3.5f, 7, 3.5f, 13.5f, 12.5f, 13.5f, 12.5f, 7));
+            }
+            case "flag" -> {
+                g.draw(path(4, 14, 4, 2));
+                g.draw(path(4, 2.5f, 13, 4.5f, 4, 8));
+            }
+            case "mansion" -> {
+                g.draw(path(1.5f, 14, 1.5f, 7, 5, 4, 8, 7, 11, 4, 14.5f, 7, 14.5f, 14, 1.5f, 14));
+                g.draw(path(7, 14, 7, 10.5f, 9, 10.5f, 9, 14));
+            }
+            case "pyramid" -> {
+                g.draw(path(1.5f, 13.5f, 8, 2.5f, 14.5f, 13.5f, 1.5f, 13.5f));
+                g.draw(path(4.8f, 8, 11.2f, 8));
+            }
+            case "dome" -> {
+                Path2D p = new Path2D.Float();
+                p.moveTo(1.5, 13);
+                p.curveTo(1.5, 4.5, 14.5, 4.5, 14.5, 13);
+                p.closePath();
+                g.draw(p);
+                g.draw(path(6.5f, 13, 6.5f, 10, 9.5f, 10, 9.5f, 13));
+            }
+            case "city" -> {
+                g.draw(path(1.5f, 14, 14.5f, 14));
+                for (int i = 0; i < 3; i++) g.draw(path(3.5f + i * 4.5f, 14, 3.5f + i * 4.5f, 5));
+                g.draw(path(1.5f, 5, 14.5f, 5));
+                g.draw(path(3, 3, 13, 3));
+            }
+            case "trial" -> {
+                g.draw(new RoundRectangle2D.Float(2.5f, 2.5f, 11, 11, 2, 2));
+                g.draw(path(8, 2.5f, 8, 13.5f));
+                g.draw(path(2.5f, 8, 13.5f, 8));
+            }
+            case "eye" -> {
+                Path2D p = new Path2D.Float();
+                p.moveTo(1.5, 8);
+                p.curveTo(4, 3.5, 12, 3.5, 14.5, 8);
+                p.curveTo(12, 12.5, 4, 12.5, 1.5, 8);
+                g.draw(p);
+                g.fill(new Ellipse2D.Float(6, 6, 4, 4));
+            }
+            case "portal" -> {
+                g.draw(new RoundRectangle2D.Float(3.5f, 1.5f, 9, 13, 1, 1));
+                g.draw(new RoundRectangle2D.Float(6, 4, 4, 8, 1, 1));
+            }
+            case "ship" -> {
+                g.draw(path(1.5f, 9, 14.5f, 9, 12, 13.5f, 4, 13.5f, 1.5f, 9));
+                g.draw(path(8, 9, 8, 2));
+                g.draw(path(8, 2.5f, 12.5f, 7, 8, 7));
+            }
+            case "tower" -> {
+                g.draw(path(4, 14.5f, 4, 4, 12, 4, 12, 14.5f));
+                g.draw(path(3, 4, 3, 1.5f, 5.5f, 1.5f, 5.5f, 3, 10.5f, 3, 10.5f, 1.5f, 13, 1.5f, 13, 4));
+                g.draw(path(6.5f, 14.5f, 6.5f, 10.5f, 9.5f, 10.5f, 9.5f, 14.5f));
+            }
             default -> g.draw(new Ellipse2D.Float(3, 3, 10, 10));
         }
     }

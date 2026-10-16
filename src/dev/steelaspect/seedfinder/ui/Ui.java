@@ -120,7 +120,13 @@ public final class Ui {
 
     public static class FlatButton extends JButton {
         private final Kind kind;
-        private boolean hover;
+        private boolean hover, active;
+
+        /** Shows the button as the chosen one of a group (tinted, accent text). */
+        public void setActive(boolean on) {
+            active = on;
+            repaint();
+        }
 
         public FlatButton(String text, Icon icon, Kind kind) {
             super(text, icon);
@@ -160,7 +166,7 @@ public final class Ui {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = smooth(g);
             boolean on = isEnabled();
-            Color fill = switch (kind) {
+            Color fill = active ? Theme.ACCENT_SOFT : switch (kind) {
                 case PRIMARY -> !on ? Theme.FIELD : hover || getModel().isPressed() ? Theme.ACCENT_HOVER : Theme.ACCENT;
                 case SECONDARY -> hover && on ? Theme.FIELD_HOVER : Theme.FIELD;
                 case GHOST -> hover && on ? Theme.FIELD : null;
@@ -170,11 +176,11 @@ public final class Ui {
                 g2.fill(new RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), Theme.RADIUS * 2, Theme.RADIUS * 2));
             }
             if (kind == Kind.SECONDARY) {
-                g2.setColor(hover && on ? Theme.BORDER_STRONG : Theme.BORDER);
+                g2.setColor(active ? Theme.ACCENT : hover && on ? Theme.BORDER_STRONG : Theme.BORDER);
                 g2.draw(new RoundRectangle2D.Float(0.5f, 0.5f, getWidth() - 1, getHeight() - 1, Theme.RADIUS * 2, Theme.RADIUS * 2));
             }
             g2.dispose();
-            setForeground(!on ? Theme.TEXT3 : kind == Kind.PRIMARY ? Theme.ON_ACCENT : Theme.TEXT);
+            setForeground(!on ? Theme.TEXT3 : active ? Theme.ACCENT_HOVER : kind == Kind.PRIMARY ? Theme.ON_ACCENT : Theme.TEXT);
             super.paintComponent(g);
         }
     }

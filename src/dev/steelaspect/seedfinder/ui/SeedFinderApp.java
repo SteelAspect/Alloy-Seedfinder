@@ -52,6 +52,7 @@ public final class SeedFinderApp {
     private final JPanel content = new JPanel(cards);
     private final Map<String, JComponent> pages = new LinkedHashMap<>();
     private final List<SearchPage> searchPages = new ArrayList<>();
+    private final MapPage mapPage;
     private final HistoryPage history;
     private final SettingsPage settingsPage;
     private final Sidebar sidebar = new Sidebar();
@@ -79,6 +80,8 @@ public final class SeedFinderApp {
         });
         root.add(topBar(), BorderLayout.NORTH);
 
+        mapPage = new MapPage(this);
+        add("map", mapPage);
         for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this),
                 new Pages.Nether(this), new Pages.Fortresses(this))) {
             p.build();
@@ -91,6 +94,8 @@ public final class SeedFinderApp {
         add("settings", settingsPage);
         content.setBackground(Theme.BG);
 
+        sidebar.section("Explore");
+        sidebar.item("map", "Map", "map");
         sidebar.section("Overworld");
         sidebar.item("biomes", "Biomes", "mountain");
         sidebar.item("solid", "Solid areas", "square");
@@ -107,7 +112,7 @@ public final class SeedFinderApp {
         frame.setContentPane(root);
         seedsChanged();
         setSpeed(settings.speed);
-        show("biomes");
+        show("map");
         warmUp();
     }
 
@@ -162,6 +167,7 @@ public final class SeedFinderApp {
         sidebar.select(id);
         JComponent page = pages.get(id);
         if (page instanceof SearchPage p) p.shown();
+        if (page == mapPage) mapPage.shown();
         if (page == history) history.reload();
         if (page == settingsPage) settingsPage.reload();
     }
@@ -187,6 +193,7 @@ public final class SeedFinderApp {
         updatingSeeds = false;
         settings.save();
         for (SearchPage p : searchPages) p.seedChanged();
+        if (mapPage != null) mapPage.seedChanged();
         if (settingsPage != null) settingsPage.reload();
     }
 
@@ -457,7 +464,10 @@ public final class SeedFinderApp {
             frame.setSize(1380, 880);
             frame.getContentPane().setSize(1380, 880);
             if (open != null) open(open);
-            else show(page.replace("search:", ""));
+            else if (page.startsWith("map:")) {
+                show("map");
+                mapPage.switchTo(Dim.valueOf(page.substring(4).toUpperCase()));
+            } else show(page.replace("search:", ""));
             frame.getContentPane().validate();
             if (page.startsWith("search:") && pages.get(page.substring(7)) instanceof SearchPage p) p.pressSearch();
         });

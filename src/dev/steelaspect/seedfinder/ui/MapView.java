@@ -3,6 +3,7 @@ package dev.steelaspect.seedfinder.ui;
 import dev.steelaspect.seedfinder.engine.Dim;
 import dev.steelaspect.seedfinder.engine.Fmt;
 import dev.steelaspect.seedfinder.engine.Result;
+import dev.steelaspect.seedfinder.engine.StructureLayers;
 import dev.steelaspect.seedfinder.engine.WorldGen;
 import dev.steelaspect.seedfinder.engine.WorldType;
 
@@ -74,6 +75,28 @@ public final class MapView extends JComponent {
     private volatile int generation;
     private final Timer repaintSoon = new Timer(80, e -> repaint());
 
+    // Structure icons (the Map page). Icons are worked out per 4096-block cell, only for what's on screen.
+    private static final int ICON_CELL = 4096;
+    private volatile Set<StructureLayers.Layer> layers = Set.of();
+    private final Map<String, List<StructureLayers.Icon>> icons = java.util.Collections.synchronizedMap(new LinkedHashMap<>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, List<StructureLayers.Icon>> e) {
+            return size() > 6000;
+        }
+    });
+    private final Set<String> iconPending = ConcurrentHashMap.newKeySet();
+    private java.util.function.BiConsumer<StructureLayers.Icon, java.awt.Point> onIcon = (i, p) -> {};
+    private final List<java.awt.geom.Point2D.Double> drawnIconSpots = new ArrayList<>();
+    private final List<StructureLayers.Icon> drawnIcons = new ArrayList<>();
+
+    // Live biome under the cursor: one background thread, always answering the latest position only.
+    private static final java.util.concurrent.ExecutorService HOVER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "map-hover");
+        t.setDaemon(true);
+        return t;
+    });
+    private final java.util.concurrent.atomic.AtomicInteger hoverSeq = new java.util.concurrent.atomic.AtomicInteger();
+
     public MapView() {
         setPreferredSize(new Dimension(480, 480));
         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
@@ -111,6 +134,11 @@ public final class MapView extends JComponent {
                     onSelect.accept(pin);
                     return;
                 }
+                StructureLayers.Icon icon = iconAt(e.getX(), e.getY());
+                if (icon != null) {
+                    onIcon.accept(icon, e.getPoint());
+                    return;
+                }
                 if (e.getY() < 44 && e.getX() > getWidth() - 116) {
                     if (e.getX() < getWidth() - 80) zoom(-1, getWidth() / 2, getHeight() / 2);
                     else if (e.getX() < getWidth() - 44) zoom(1, getWidth() / 2, getHeight() / 2);
@@ -124,7 +152,21 @@ public final class MapView extends JComponent {
             public void mouseMoved(MouseEvent e) {
                 int bx = (int) Math.floor(blockX(e.getX())), bz = (int) Math.floor(blockZ(e.getY()));
                 hoverText = bx + ", " + bz;
+                setCursor(Cursor.getPredefinedCursor(iconAt(e.getX(), e.getY()) != null || pinAt(e.getX(), e.getY()) >= 0
+                        ? Cursor.HAND_CURSOR : Cursor.CROSSHAIR_CURSOR));
                 repaint();
+                TileRenderer.Spec v = view;
+                if (v == null) return;
+                int seq = hoverSeq.incrementAndGet();
+                HOVER.submit(() -> {
+                    if (seq != hoverSeq.get()) return;
+                    String b = WorldGen.of(v.seed(), v.dim(), v.type()).mapBiomeAt(bx, bz);
+                    SwingUtilities.invokeLater(() -> {
+                        if (seq != hoverSeq.get()) return;
+                        hoverText = bx + ", " + bz + "  ·  " + Fmt.biome(b);
+                        repaint();
+                    });
+                });
             }
 
             @Override
@@ -135,6 +177,41 @@ public final class MapView extends JComponent {
         addMouseListener(m);
         addMouseMotionListener(m);
         addMouseWheelListener(m);
+    }
+
+    /** Structure layers to draw (the Map page). */
+    public void setLayers(Set<StructureLayers.Layer> set) {
+        layers = Set.copyOf(set);
+        repaint();
+    }
+
+    /** Called when a structure icon is clicked, with the click position. */
+    public void onIcon(java.util.function.BiConsumer<StructureLayers.Icon, java.awt.Point> listener) {
+        onIcon = listener;
+    }
+
+    /** Moves the view to a block, keeping the zoom. */
+    public void goTo(int x, int z) {
+        centerX = x;
+        centerZ = z;
+        repaint();
+    }
+
+    public int zoomLevel() {
+        return level;
+    }
+
+    public void setZoomLevel(int l) {
+        level = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, l));
+        repaint();
+    }
+
+    public int centerBlockX() {
+        return (int) Math.round(centerX);
+    }
+
+    public int centerBlockZ() {
+        return (int) Math.round(centerZ);
     }
 
     public void onSelect(IntConsumer listener) {
@@ -269,8 +346,10 @@ public final class MapView extends JComponent {
             g2.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1, new float[]{6, 5}, 0));
             g2.draw(new Rectangle((int) x0, (int) z0, (int) size, (int) size));
         }
+        List<String> hidden = paintIcons(g2, w, h, bpp);
         paintResults(g2, w, h, bpp);
         paintOverlay(g2, w, h, bpp);
+        if (!hidden.isEmpty()) paintHint(g2, w, "Zoom in to see " + String.join(", ", hidden).toLowerCase());
         g2.setClip(null);
         g2.setColor(Theme.BORDER);
         g2.setStroke(new BasicStroke(1f));
@@ -369,6 +448,104 @@ public final class MapView extends JComponent {
         double x0 = tx * tileBlocks, z0 = tz * tileBlocks;
         double halfW = (getWidth() / 2.0 + TILE) * bpp, halfH = (getHeight() / 2.0 + TILE) * bpp;
         return x0 + tileBlocks >= centerX - halfW && x0 <= centerX + halfW && z0 + tileBlocks >= centerZ - halfH && z0 <= centerZ + halfH;
+    }
+
+    /** Draws the structure icons; returns the labels of layers hidden because the map is zoomed out too far. */
+    private List<String> paintIcons(Graphics2D g2, int w, int h, double bpp) {
+        List<String> hidden = new ArrayList<>();
+        drawnIcons.clear();
+        drawnIconSpots.clear();
+        TileRenderer.Spec v = view;
+        if (v == null || layers.isEmpty()) return hidden;
+        String world = v.seed() + "/" + v.type() + "/" + v.dim();
+        long minCx = Math.floorDiv((long) Math.floor(blockX(0)), ICON_CELL), maxCx = Math.floorDiv((long) Math.floor(blockX(w)), ICON_CELL);
+        long minCz = Math.floorDiv((long) Math.floor(blockZ(0)), ICON_CELL), maxCz = Math.floorDiv((long) Math.floor(blockZ(h)), ICON_CELL);
+        for (StructureLayers.Layer layer : StructureLayers.Layer.values()) {
+            if (!layers.contains(layer) || layer.dim != v.dim()) continue;
+            if (bpp > layer.maxBlocksPerPixel) {
+                hidden.add(layer.label);
+                continue;
+            }
+            // Strongholds come from one world-wide ring calculation: one job for all of them, not one per cell.
+            boolean global = layer == StructureLayers.Layer.STRONGHOLD;
+            for (long cx = global ? 0 : minCx; cx <= (global ? 0 : maxCx); cx++)
+                for (long cz = global ? 0 : minCz; cz <= (global ? 0 : maxCz); cz++) {
+                    String key = world + "/" + layer + "/" + (global ? "all" : cx + "/" + cz);
+                    List<StructureLayers.Icon> list = icons.get(key);
+                    if (list == null) {
+                        requestIcons(key, v, layer, cx, cz, global);
+                        continue;
+                    }
+                    for (StructureLayers.Icon icon : list) {
+                        double x = (icon.x() - centerX) / bpp + w / 2.0, z = (icon.z() - centerZ) / bpp + h / 2.0;
+                        if (x < -12 || z < -12 || x > w + 12 || z > h + 12) continue;
+                        g2.setColor(new Color(0, 0, 0, 110));
+                        g2.fill(new Ellipse2D.Double(x - 10, z - 9, 20, 20));
+                        g2.setColor(new Color(layer.color));
+                        g2.fill(new Ellipse2D.Double(x - 10, z - 10, 20, 20));
+                        g2.setColor(new Color(0x16181D));
+                        g2.setStroke(new BasicStroke(1.4f));
+                        g2.draw(new Ellipse2D.Double(x - 10, z - 10, 20, 20));
+                        Icons.get(layer.icon, 12, new Color(0x16181D)).paintIcon(this, g2, (int) Math.round(x - 6), (int) Math.round(z - 6));
+                        drawnIcons.add(icon);
+                        drawnIconSpots.add(new java.awt.geom.Point2D.Double(x, z));
+                    }
+                }
+        }
+        return hidden;
+    }
+
+    private void requestIcons(String key, TileRenderer.Spec v, StructureLayers.Layer layer, long cx, long cz, boolean global) {
+        if (!iconPending.add(key)) return;
+        int gen = generation;
+        double mx = (cx + 0.5) * ICON_CELL, mz = (cz + 0.5) * ICON_CELL;
+        TileScheduler.submit(new TileScheduler.Job() {
+            @Override
+            public double priority() {
+                // Icons are quick and the main thing on the Map page: they go before map tiles.
+                return -1e9 + Math.hypot(mx - centerX, mz - centerZ) / bpp();
+            }
+
+            @Override
+            public boolean wanted() {
+                double halfW = (getWidth() / 2.0 + 64) * bpp(), halfH = (getHeight() / 2.0 + 64) * bpp();
+                boolean ok = gen == generation && layers.contains(layer) && bpp() <= layer.maxBlocksPerPixel
+                        && (global || mx + ICON_CELL / 2.0 >= centerX - halfW && mx - ICON_CELL / 2.0 <= centerX + halfW
+                        && mz + ICON_CELL / 2.0 >= centerZ - halfH && mz - ICON_CELL / 2.0 <= centerZ + halfH);
+                if (!ok) iconPending.remove(key);
+                return ok;
+            }
+
+            @Override
+            public void run() {
+                try {
+                    int x0 = global ? -30_000_000 : (int) Math.max(-30_000_000L, cx * ICON_CELL);
+                    int z0 = global ? -30_000_000 : (int) Math.max(-30_000_000L, cz * ICON_CELL);
+                    int x1 = global ? 30_000_000 : (int) Math.min(30_000_000L, cx * ICON_CELL + ICON_CELL - 1);
+                    int z1 = global ? 30_000_000 : (int) Math.min(30_000_000L, cz * ICON_CELL + ICON_CELL - 1);
+                    icons.put(key, StructureLayers.find(WorldGen.of(v.seed(), v.dim(), v.type()), layer, x0, z0, x1, z1));
+                    SwingUtilities.invokeLater(repaintSoon::restart);
+                } finally {
+                    iconPending.remove(key);
+                }
+            }
+        });
+    }
+
+    private StructureLayers.Icon iconAt(int px, int py) {
+        for (int i = drawnIcons.size() - 1; i >= 0; i--)
+            if (drawnIconSpots.get(i).distance(px, py) <= 11) return drawnIcons.get(i);
+        return null;
+    }
+
+    private void paintHint(Graphics2D g2, int w, String text) {
+        g2.setFont(Theme.FONT_SMALL);
+        FontMetrics fm = g2.getFontMetrics();
+        int tw = fm.stringWidth(text) + 24;
+        g2.setColor(new Color(22, 24, 29, 220));
+        g2.fill(new RoundRectangle2D.Float((w - tw) / 2f, 10, tw, 26, 8, 8));
+        g2.setColor(Theme.TEXT2);
+        g2.drawString(text, (w - tw) / 2f + 12, 28);
     }
 
     private void paintResults(Graphics2D g2, int w, int h, double bpp) {
