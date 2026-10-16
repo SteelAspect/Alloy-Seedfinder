@@ -5,6 +5,8 @@ import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.HolderSet;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.resources.Identifier;
@@ -90,6 +92,31 @@ public final class Mc {
                     if (members.contains(id)) tags.add(TagKey.create(Registries.BIOME, Identifier.parse(tag)));
                 });
                 bind.invoke(biome, tags);
+            }
+            // Structures keep their biome list as a tag set, which this code-built registry can't read. Give each
+            // structure a plain list of the same biomes (structure placement reads it).
+            Map<String, Holder<Biome>> byId = new HashMap<>();
+            lookup.lookupOrThrow(Registries.BIOME).listElements().forEach(h -> byId.put(h.key().identifier().toString(), h));
+            java.lang.reflect.Field settingsField = Structure.class.getDeclaredField("settings");
+            settingsField.setAccessible(true);
+            for (Holder.Reference<Structure> structure : lookup.lookupOrThrow(Registries.STRUCTURE).listElements().toList()) {
+                Object settings = settingsField.get(structure.value());
+                if (!(structure.value().biomes() instanceof HolderSet.Named<Biome> named)) continue;
+                List<Holder<Biome>> members = new ArrayList<>();
+                for (String id : resolved.getOrDefault(named.key().location().toString(), Set.of())) {
+                    Holder<Biome> h = byId.get(id);
+                    if (h != null) members.add(h);
+                }
+                java.lang.reflect.RecordComponent[] parts = settings.getClass().getRecordComponents();
+                Object[] values = new Object[parts.length];
+                Class<?>[] types = new Class<?>[parts.length];
+                for (int i = 0; i < parts.length; i++) {
+                    types[i] = parts[i].getType();
+                    values[i] = parts[i].getName().equals("biomes") ? HolderSet.direct(members) : parts[i].getAccessor().invoke(settings);
+                }
+                java.lang.reflect.Constructor<?> make = settings.getClass().getDeclaredConstructor(types);
+                make.setAccessible(true);
+                settingsField.set(structure.value(), make.newInstance(values));
             }
         } catch (Exception e) {
             throw new IllegalStateException("Couldn't load biome tags from the Minecraft jar", e);

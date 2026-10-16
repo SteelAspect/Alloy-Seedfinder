@@ -54,7 +54,11 @@ final class Structures {
             }
             if (!possible) return null;
         }
-        StructureStart s = structure.value().generate(structure, w.dim == Dim.NETHER ? Level.NETHER : Level.OVERWORLD, null, w.generator,
+        StructureStart s = structure.value().generate(structure, switch (w.dim) {
+            case NETHER -> Level.NETHER;
+            case END -> Level.END;
+            case OVERWORLD -> Level.OVERWORLD;
+        }, null, w.generator,
                 w.source, w.random, null, w.seed, chunk, 0, w.heights, b -> structure.value().biomes().contains(b));
         return s.isValid() ? s : null;
     }

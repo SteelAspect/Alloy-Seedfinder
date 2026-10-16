@@ -34,7 +34,7 @@ public final class Exporters {
 
     /** Height used when a result has none (waypoints need one). */
     private static int y(Result r) {
-        return r.y != null ? r.y : r.dim == Dim.NETHER ? 64 : 100;
+        return r.y != null ? r.y : r.dim == Dim.OVERWORLD ? 100 : 64;
     }
 
     // ------------------------------------------------------------------ Xaero
@@ -115,7 +115,11 @@ public final class Exporters {
     public static Path toXaero(Path minimapDir, String server, List<Result> results) throws IOException {
         if (results.isEmpty()) throw new IOException("Nothing to export");
         Dim dim = results.get(0).dim;
-        Path dimDir = minimapDir.resolve(server).resolve(dim == Dim.NETHER ? "dim%-1" : "dim%0");
+        Path dimDir = minimapDir.resolve(server).resolve(switch (dim) {
+            case NETHER -> "dim%-1";
+            case END -> "dim%1";
+            case OVERWORLD -> "dim%0";
+        });
         Files.createDirectories(dimDir);
         Path file = dimDir.resolve("mw$default_1.txt");
         List<String> lines = Files.exists(file) ? new ArrayList<>(Files.readAllLines(file, StandardCharsets.UTF_8)) : new ArrayList<>();

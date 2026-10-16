@@ -7,6 +7,8 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.TheEndBiomeSource;
 import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
@@ -32,7 +34,7 @@ public final class WorldGen {
     public final WorldType type;
     public final HolderLookup.Provider lookup;
     public final RandomState random;
-    public final MultiNoiseBiomeSource source;
+    public final BiomeSource source;
     public final NoiseBasedChunkGenerator generator;
     public final LevelHeightAccessor heights;
     private final Climate.Sampler sampler;
@@ -41,7 +43,7 @@ public final class WorldGen {
     private final Map<Holder<Biome>, String> names = new ConcurrentHashMap<>();
 
     public static WorldGen of(long seed, Dim dim, WorldType type) {
-        WorldType t = dim == Dim.NETHER ? WorldType.NORMAL : type;
+        WorldType t = dim == Dim.OVERWORLD ? type : WorldType.NORMAL;
         return CACHE.computeIfAbsent(seed + "/" + dim + "/" + t, k -> new WorldGen(seed, dim, t));
     }
 
@@ -50,15 +52,20 @@ public final class WorldGen {
         this.dim = dim;
         this.type = type;
         lookup = Mc.lookup();
-        ResourceKey<NoiseGeneratorSettings> settings = dim == Dim.NETHER ? NoiseGeneratorSettings.NETHER : switch (type) {
-            case LARGE_BIOMES -> NoiseGeneratorSettings.LARGE_BIOMES;
-            case AMPLIFIED -> NoiseGeneratorSettings.AMPLIFIED;
-            case NORMAL -> NoiseGeneratorSettings.OVERWORLD;
+        ResourceKey<NoiseGeneratorSettings> settings = switch (dim) {
+            case NETHER -> NoiseGeneratorSettings.NETHER;
+            case END -> NoiseGeneratorSettings.END;
+            case OVERWORLD -> switch (type) {
+                case LARGE_BIOMES -> NoiseGeneratorSettings.LARGE_BIOMES;
+                case AMPLIFIED -> NoiseGeneratorSettings.AMPLIFIED;
+                case NORMAL -> NoiseGeneratorSettings.OVERWORLD;
+            };
         };
         random = RandomState.create(lookup, settings, seed);
-        source = MultiNoiseBiomeSource.createFromPreset(lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
+        source = dim == Dim.END ? TheEndBiomeSource.create(lookup.lookupOrThrow(Registries.BIOME))
+                : MultiNoiseBiomeSource.createFromPreset(lookup.lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST)
                 .getOrThrow(dim == Dim.NETHER ? MultiNoiseBiomeSourceParameterLists.NETHER : MultiNoiseBiomeSourceParameterLists.OVERWORLD));
-        heights = dim == Dim.NETHER ? LevelHeightAccessor.create(0, 256) : LevelHeightAccessor.create(-64, 384);
+        heights = dim == Dim.OVERWORLD ? LevelHeightAccessor.create(-64, 384) : LevelHeightAccessor.create(0, 256);
         generator = new NoiseBasedChunkGenerator(source, lookup.lookupOrThrow(Registries.NOISE_SETTINGS).getOrThrow(settings));
         sampler = random.sampler();
         surface = random.router().preliminarySurfaceLevel();
@@ -66,10 +73,10 @@ public final class WorldGen {
 
     /**
      * The biome you'd see at (x, z): at the land surface, or the water surface over oceans and rivers.
-     * Nether biomes don't change with height. Returns a shared string like "badlands".
+     * Nether and End biomes don't change with height. Returns a shared string like "badlands".
      */
     public String biomeAt(int x, int z) {
-        int y = dim == Dim.NETHER ? 64 : Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
+        int y = dim != Dim.OVERWORLD ? 64 : Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
         return name(biome(x, y, z));
     }
 
@@ -79,7 +86,7 @@ public final class WorldGen {
      * Searches always use {@link #biomeAt}.
      */
     public String mapBiomeAt(int x, int z) {
-        if (dim == Dim.NETHER) return biomeAt(x, z);
+        if (dim != Dim.OVERWORLD) return biomeAt(x, z);
         String b = name(biome(x, MAP_Y, z));
         return CAVE_BIOMES.contains(b) ? biomeAt(x, z) : b;
     }

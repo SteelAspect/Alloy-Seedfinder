@@ -34,7 +34,7 @@ public final class Result {
 
     public String tp() {
         String cmd = "tp @s " + x + " " + (y == null ? "~" : y) + " " + z;
-        return dim == Dim.NETHER ? "/execute in minecraft:the_nether run " + cmd : "/" + cmd;
+        return dim == Dim.OVERWORLD ? "/" + cmd : "/execute in " + dim.id + " run " + cmd;
     }
 
     public String coords() {

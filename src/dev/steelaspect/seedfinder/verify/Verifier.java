@@ -213,7 +213,7 @@ public final class Verifier {
     }
 
     private void biomeChecks(List<Check> out, int i, int point, Result r, int x, int z) {
-        String pos = r.dim == Dim.NETHER ? "positioned " + x + " 64 " + z + " "
+        String pos = r.dim != Dim.OVERWORLD ? "positioned " + x + " 64 " + z + " "
                 : "positioned " + x + " 0 " + z + " positioned over world_surface positioned ~ ~-1 ~ ";
         for (String b : r.biomes)
             out.add(new Check(nextId++, i, point, r.dim, x, z, true,

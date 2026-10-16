@@ -67,6 +67,11 @@ public final class BiomeColors {
         put(0xDD0808, "crimson_forest");
         put(0x49907B, "warped_forest");
         put(0x403636, "basalt_deltas");
+        put(0x6B5D8C, "the_end");
+        put(0xC9C78F, "end_highlands");
+        put(0x9C9A6B, "end_midlands");
+        put(0x6E6C4E, "end_barrens");
+        put(0x3D3550, "small_end_islands");
     }
 
     private static void put(int rgb, String biome) {
