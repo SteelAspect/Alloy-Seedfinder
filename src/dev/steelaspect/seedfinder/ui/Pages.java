@@ -150,7 +150,7 @@ final class Pages {
 
     static final class Solid extends SearchPage {
         Solid(SeedFinderApp app) {
-            super(app, "solid", "Solid areas", "Biggest square and rectangle that are all one biome, with no gaps (exact to 4 blocks)");
+            super(app, "solid", "Solid areas", "The 10 biggest squares and rectangles that are all one biome, each in a different spot (exact to 4 blocks)");
         }
 
         @Override

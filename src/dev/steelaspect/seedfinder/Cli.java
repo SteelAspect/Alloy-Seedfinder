@@ -38,7 +38,7 @@ final class Cli {
 
               seedfinder biomes <seed> [--biomes badlands,eroded_badlands] [--joined]   biggest connected biome areas
               seedfinder nether <seed>                                                 biggest area of each nether biome
-              seedfinder solid <seed> --biomes crimson_forest [--nether]               biggest solid square + rectangle
+              seedfinder solid <seed> --biomes crimson_forest [--nether]               10 biggest solid squares + rectangles
               seedfinder huts <seed> [--max-y -50]                                     witch huts at or below a height
               seedfinder monuments <seed> [--min 3]                                    double/triple/quad monument spots
               seedfinder fortresses <seed> [--min-dist 0]                              biggest nether fortresses

@@ -7,12 +7,16 @@ import java.util.Map;
 import java.util.stream.IntStream;
 
 /**
- * Biggest SOLID square and rectangle of each biome: every block inside is that biome, no gaps.
- * Found on the coarse grid, then the best few are re-checked every 4 blocks (Minecraft's biome cell size).
+ * Biggest SOLID squares and rectangles of each biome: every block inside is that biome, no gaps.
+ * Found on the coarse grid, then the best candidates are re-checked every 4 blocks (Minecraft's biome cell size).
+ * Lists the top few of each shape per biome, each in a different spot (no two overlap).
  */
 public final class SolidSearch {
     private static final int FINE = 4;
-    private static final int CANDIDATES = 5;
+    /** How many of each shape to list per biome. */
+    public static final int TOP = 10;
+    /** Coarse candidates kept per biome and shape (more than TOP: refining can shrink or merge them). */
+    private static final int CANDIDATES = 40;
 
     public record Params(Search area, Dim dim, int step, List<String> biomes) {}
 
@@ -45,26 +49,58 @@ public final class SolidSearch {
         int done = 0;
         for (String b : p.biomes()) {
             progress.check();
-            progress.update(0.93 + 0.07 * done++ / p.biomes().size(), "Measuring " + Fmt.biome(b) + " exactly");
-            int[] sq = null; // x, z, width, height in blocks
-            for (Box s : squares.get(b)) sq = bigger(sq, refine(s, g, world, true));
-            int[] rect = sq;
-            for (Box r : rects.get(b)) rect = bigger(rect, refine(r, g, world, false));
-            if (sq != null) out.add(result(Result.Kind.SQUARE, b, sq, p));
-            if (rect != null) out.add(result(Result.Kind.RECTANGLE, b, rect, p));
+            double from = 0.9 + 0.1 * done++ / p.biomes().size(), span = 0.1 / p.biomes().size();
+            String what = "Measuring " + Fmt.biome(b) + " exactly";
+            List<int[]> sq = best(squares.get(b), g, world, true, progress, from, span / 2, what);
+            List<int[]> rect = best(rects.get(b), g, world, false, progress, from + span / 2, span / 2, what);
+            // A rectangle that is exactly one of the listed squares would just be listed twice.
+            rect.removeIf(r -> sq.stream().anyMatch(q -> java.util.Arrays.equals(q, r)));
+            for (int i = 0; i < sq.size(); i++) out.add(result(Result.Kind.SQUARE, b, sq.get(i), i + 1, p));
+            for (int i = 0; i < rect.size(); i++) out.add(result(Result.Kind.RECTANGLE, b, rect.get(i), i + 1, p));
         }
         out.sort((a, c) -> Double.compare(c.value, a.value));
         progress.update(1, "Done");
         return out;
     }
 
-    private static int[] bigger(int[] a, int[] b) {
-        if (b == null) return a;
-        if (a == null) return b;
-        return (long) b[2] * b[3] > (long) a[2] * a[3] ? b : a;
+    /**
+     * Refines coarse candidates (biggest first) and keeps the TOP biggest exact boxes that don't overlap each other.
+     * Skips candidates that can't beat the smallest kept box: refining only looks one coarse step past each side, so a
+     * candidate of w x h cells can't come out bigger than ((w+2)*step + 4) x ((h+2)*step + 4) blocks.
+     */
+    private static List<int[]> best(List<Box> coarse, BiomeSearch.Grid g, WorldGen world, boolean square, Progress progress,
+                                    double from, double span, String what) {
+        List<int[]> refined = new ArrayList<>();
+        for (int i = 0; i < coarse.size(); i++) {
+            progress.check();
+            Box b = coarse.get(i);
+            List<int[]> kept = distinct(refined);
+            long most = ((long) (b.width() + 2) * g.step() + FINE) * ((long) (b.height() + 2) * g.step() + FINE);
+            if (kept.size() >= TOP && most <= area(kept.get(TOP - 1))) continue;
+            progress.update(from + span * i / coarse.size(), what);
+            int[] r = refine(b, g, world, square);
+            if (r != null) refined.add(r);
+        }
+        return distinct(refined);
     }
 
-    private static Result result(Result.Kind kind, String biome, int[] box, Params p) {
+    /** Biggest first, dropping any box that overlaps a bigger one already kept; at most TOP. */
+    private static List<int[]> distinct(List<int[]> boxes) {
+        List<int[]> sorted = new ArrayList<>(boxes);
+        sorted.sort((a, b) -> Long.compare(area(b), area(a)));
+        List<int[]> kept = new ArrayList<>();
+        for (int[] b : sorted) {
+            if (kept.size() >= TOP) break;
+            if (kept.stream().noneMatch(k -> b[0] < k[0] + k[2] && k[0] < b[0] + b[2] && b[1] < k[1] + k[3] && k[1] < b[1] + b[3])) kept.add(b);
+        }
+        return kept;
+    }
+
+    private static long area(int[] box) {
+        return (long) box[2] * box[3];
+    }
+
+    private static Result result(Result.Kind kind, String biome, int[] box, int rank, Params p) {
         Result r = new Result();
         r.kind = kind;
         r.dim = p.dim();
@@ -77,7 +113,7 @@ public final class SolidSearch {
         r.z = box[1] + box[3] / 2;
         r.value = (double) box[2] * box[3];
         r.size = box[2] + "x" + box[3];
-        r.details.put("Shape", kind == Result.Kind.SQUARE ? "Square" : "Rectangle");
+        r.details.put("Shape", (kind == Result.Kind.SQUARE ? "Square" : "Rectangle") + " #" + rank);
         r.details.put("Area", Fmt.n((long) r.value));
         r.details.put("NW corner", box[0] + ", " + box[1]);
         r.details.put("Distance", Fmt.n(p.area().distance(r.x, r.z)));
