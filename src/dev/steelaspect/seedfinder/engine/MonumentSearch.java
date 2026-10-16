@@ -2,6 +2,7 @@ package dev.steelaspect.seedfinder.engine;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Climate;
@@ -9,6 +10,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructureSets;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 
@@ -21,10 +23,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.LongStream;
 
 /**
- * AFK spots for 2, 3 or 4 ocean monuments: within 128 blocks (sideways) of the middle of every one, so each gives a
- * real share of guardians. Ranked by how many blocks of guardian spawning space are in range, by Minecraft's rules
- * (NaturalSpawner): a mob spawns more than 24 and at most 128 blocks from the player, and guardians spawn anywhere in
- * a monument's box (58 x 23 x 58).
+ * AFK spots for 2, 3 or 4 ocean monuments or witch huts: within 128 blocks (sideways) of the middle of every one, so
+ * each gives a real share of mobs. Ranked by how many blocks of spawning space are in range, by Minecraft's rules
+ * (NaturalSpawner): a mob spawns more than 24 and at most 128 blocks from the player, guardians spawn anywhere in a
+ * monument's box (58 x 23 x 58) and witches anywhere in a hut's box (7 x 7 x 9, at the hut's real height).
  *
  * <p>Ideas from DoubleTripleQuadMonumentFinder by BrianBLee1201 (MIT licence): the 128-from-every-middle rule, count
  * the spawnable blocks exactly, start the AFK search from several points and refine it in steps of 4, 2 and 1, drop
@@ -50,11 +52,36 @@ public final class MonumentSearch {
         for (int i = 0; i <= FAR2; i++) ISQRT[i] = (int) Math.sqrt(i);
     }
 
-    /** @param minDist only spots at least this far out on x or z (skips the middle of the area) */
-    public record Params(Search area, int minCount, int minDist, int top) {}
+    /** What to group. slack: how far (blocks) the middle can be from where the placement maths alone puts it. */
+    public enum Kind {
+        MONUMENT("monuments", BuiltinStructureSets.OCEAN_MONUMENTS, BuiltinStructures.OCEAN_MONUMENT, 0),
+        HUT("witch huts", BuiltinStructureSets.SWAMP_HUTS, BuiltinStructures.SWAMP_HUT, 2);
 
-    /** One monument: its region, its middle (its chunk's corner, where /locate points) and its box from the game. */
-    record Monument(int rx, int rz, int x, int z, BoundingBox box) {
+        public final String label;
+        final ResourceKey<StructureSet> set;
+        final ResourceKey<Structure> structure;
+        final int slack;
+
+        Kind(String label, ResourceKey<StructureSet> set, ResourceKey<Structure> structure, int slack) {
+            this.label = label;
+            this.set = set;
+            this.structure = structure;
+            this.slack = slack;
+        }
+    }
+
+    /** @param minDist only spots at least this far out on x or z (skips the middle of the area) */
+    public record Params(Search area, Kind kind, int minCount, int minDist, int top) {}
+
+    /**
+     * One monument or hut: its region, its chunk's corner (where /locate points), its middle (mx, mz) and its box
+     * from the game. A monument's middle is its chunk's corner; a hut's is the middle of its box.
+     */
+    record Monument(int rx, int rz, int x, int z, int mx, int mz, BoundingBox box) {
+        Monument(int rx, int rz, int x, int z, BoundingBox box) {
+            this(rx, rz, x, z, x, z, box);
+        }
+
         long key() {
             return pack(rx, rz);
         }
@@ -65,13 +92,14 @@ public final class MonumentSearch {
 
     private static final Spot NONE = new Spot(List.of(), 0, 0, 0, new int[0], 0);
     static final BoundingBox NO_MONUMENT = new BoundingBox(0, 0, 0, 0, 0, 0);
+    private static final Monument NOTHING = new Monument(0, 0, 0, 0, NO_MONUMENT);
 
     private MonumentSearch() {}
 
     public static List<Result> run(Params p, Progress progress) {
         WorldGen w = WorldGen.of(p.area().seed(), Dim.OVERWORLD, p.area().type());
-        RandomSpreadStructurePlacement placement = Structures.placement(w, BuiltinStructureSets.OCEAN_MONUMENTS);
-        Holder<Structure> monument = Structures.structure(w, BuiltinStructures.OCEAN_MONUMENT);
+        RandomSpreadStructurePlacement placement = Structures.placement(w, p.kind().set);
+        Holder<Structure> monument = Structures.structure(w, p.kind().structure);
         int[] r = Structures.regions(p.area(), placement.spacing());
         // 2x2 blocks of regions, by their top-left region; one extra on the low side so groups that straddle the
         // area's edge are seen too (their AFK spot still has to be inside).
@@ -81,7 +109,7 @@ public final class MonumentSearch {
         Map<String, Spot> spots = new ConcurrentHashMap<>();
         AtomicLong done = new AtomicLong();
         long every = Math.max(1, tiles / 400);
-        progress.update(0, "Finding monuments");
+        progress.update(0, "Finding " + p.kind().label);
         LongStream.range(0, tiles).parallel().forEach(t -> {
             progress.check();
             int ti = (int) (t / tilesZ), tj = (int) (t % tilesZ);
@@ -89,7 +117,7 @@ public final class MonumentSearch {
             int n = Math.min(TILE, i0 + rows - a), m = Math.min(TILE, j0 + cols - b);
             if (!ringSkips(p, a, b, n, m, placement.spacing() * 16)) scanTile(w, placement, monument, p, a, b, n, m, spots);
             long d = done.incrementAndGet();
-            if (d % every == 0) progress.update((double) d / tiles, "Finding monuments · " + Fmt.n(spots.size()) + " spots so far");
+            if (d % every == 0) progress.update((double) d / tiles, "Finding " + p.kind().label + " · " + Fmt.n(spots.size()) + " spots so far");
         });
 
         List<Spot> list = new ArrayList<>();
@@ -99,7 +127,7 @@ public final class MonumentSearch {
                 : Long.compare(p.area().distance(x.x, x.z), p.area().distance(y.x, y.z)));
         List<Result> out = new ArrayList<>();
         for (Spot s : list.subList(0, Math.min(p.top(), list.size()))) out.add(result(s, p));
-        progress.update(1, list.isEmpty() ? "No spots with " + p.minCount() + " or more monuments here"
+        progress.update(1, list.isEmpty() ? "No spots with " + p.minCount() + " or more " + p.kind().label + " here"
                 : count(list, 4) + " quad, " + count(list, 3) + " triple and " + count(list, 2) + " double spots");
         return out;
     }
@@ -129,7 +157,7 @@ public final class MonumentSearch {
                 cx[i * w1 + j] = c.x;
                 cz[i * w1 + j] = c.z;
             }
-        Map<Long, BoundingBox> real = new HashMap<>();
+        Map<Long, Monument> real = new HashMap<>();
         int[] node = new int[4];
         for (int i = 0; i < n; i++)
             for (int j = 0; j < m; j++) {
@@ -141,28 +169,34 @@ public final class MonumentSearch {
                 int close = 0;
                 for (int k = 0, e = 0; k < 4; k++)
                     for (int l = k + 1; l < 4; l++, e++)
-                        if (near(cx[node[k]], cz[node[k]], cx[node[l]], cz[node[l]])) close |= 1 << e;
+                        if (near(cx[node[k]], cz[node[k]], cx[node[l]], cz[node[l]], p.kind().slack)) close |= 1 << e;
                 if (Integer.bitCount(close) < p.minCount() * (p.minCount() - 1) / 2) continue;
                 List<Integer> groups = groups(close, p.minCount());
                 if (groups.isEmpty()) continue;
-                // Biome checks (the expensive part), only for regions in a possible group.
+                // Biome checks (the expensive part), only for regions in a possible group, and a group stops at its
+                // first region without one.
                 Monument[] ms = new Monument[4];
-                int ok = 0;
-                for (int k = 0; k < 4; k++) {
-                    int k0 = k;
-                    if (groups.stream().noneMatch(g -> (g & (1 << k0)) != 0)) continue;
-                    int ri = a + i + (k & 1), rj = b + j + (k >> 1);
-                    BoundingBox box = real.computeIfAbsent(pack(ri, rj),
-                            key -> monumentBox(w, monument, new ChunkPos(cx[node[k0]], cz[node[k0]])));
-                    if (box != NO_MONUMENT) {
-                        ms[k] = new Monument(ri, rj, cx[node[k]] * 16, cz[node[k]] * 16, box);
-                        ok |= 1 << k;
-                    }
-                }
-                // Biggest groups first; a group inside one that worked here isn't tried.
+                int checked = 0, ok = 0;
                 List<Integer> worked = new ArrayList<>();
                 for (int g : groups) {
-                    if ((g & ok) != g || worked.stream().anyMatch(x -> (x & g) == g)) continue;
+                    // Biggest groups first; a group inside one that worked here isn't tried.
+                    if ((g & checked & ~ok) != 0 || worked.stream().anyMatch(x -> (x & g) == g)) continue;
+                    boolean all = true;
+                    for (int k = 0; k < 4 && all; k++) {
+                        if ((g & (1 << k)) == 0) continue;
+                        if ((checked & (1 << k)) == 0) {
+                            int ri = a + i + (k & 1), rj = b + j + (k >> 1), k0 = k;
+                            Monument found = real.computeIfAbsent(pack(ri, rj),
+                                    key -> find(w, p.kind(), monument, ri, rj, new ChunkPos(cx[node[k0]], cz[node[k0]])));
+                            checked |= 1 << k;
+                            if (found != NOTHING) {
+                                ms[k] = found;
+                                ok |= 1 << k;
+                            }
+                        }
+                        all = (ok & (1 << k)) != 0;
+                    }
+                    if (!all) continue;
                     List<Monument> group = new ArrayList<>();
                     for (int k = 0; k < 4; k++) if ((g & (1 << k)) != 0) group.add(ms[k]);
                     String key = key(group);
@@ -192,10 +226,25 @@ public final class MonumentSearch {
         return out;
     }
 
-    /** Whether monuments in these two chunks have middles at most 256 blocks apart. */
-    private static boolean near(int cx1, int cz1, int cx2, int cz2) {
-        long dx = (cx1 - cx2) * 16L, dz = (cz1 - cz2) * 16L;
+    /** Whether things in these two chunks can have middles at most 256 blocks apart. */
+    private static boolean near(int cx1, int cz1, int cx2, int cz2, int slack) {
+        long dx = Math.max(0, Math.abs(cx1 - cx2) * 16L - slack), dz = Math.max(0, Math.abs(cz1 - cz2) * 16L - slack);
         return dx * dx + dz * dz <= PAIR2;
+    }
+
+    /** The monument or hut that generates in this chunk (the game's own generation), or NOTHING. */
+    private static Monument find(WorldGen w, Kind kind, Holder<Structure> structure, int rx, int rz, ChunkPos chunk) {
+        int x = chunk.getMinBlockX(), z = chunk.getMinBlockZ();
+        if (kind == Kind.MONUMENT) {
+            BoundingBox box = monumentBox(w, structure, chunk);
+            return box == NO_MONUMENT ? NOTHING : new Monument(rx, rz, x, z, box);
+        }
+        StructureStart s = Structures.start(w, structure, chunk, true);
+        if (s == null) return NOTHING;
+        // The hut settles on the average ground height of its footprint when its chunk is decorated.
+        BoundingBox b = s.getPieces().get(0).getBoundingBox();
+        BoundingBox box = b.moved(0, HutSearch.exactY(w, b) - b.minY(), 0);
+        return new Monument(rx, rz, x, z, (box.minX() + box.maxX()) / 2, (box.minZ() + box.maxZ()) / 2, box);
     }
 
     /** The monument's box if one generates in this chunk (the game's own generation), else NO_MONUMENT. */
@@ -243,10 +292,10 @@ public final class MonumentSearch {
     static Spot bestSpot(List<Monument> ms) {
         int x0 = Integer.MIN_VALUE, x1 = Integer.MAX_VALUE, z0 = Integer.MIN_VALUE, z1 = Integer.MAX_VALUE, y0 = 999, y1 = -999;
         for (Monument m : ms) {
-            x0 = Math.max(x0, m.x - FAR);
-            x1 = Math.min(x1, m.x + FAR);
-            z0 = Math.max(z0, m.z - FAR);
-            z1 = Math.min(z1, m.z + FAR);
+            x0 = Math.max(x0, m.mx - FAR);
+            x1 = Math.min(x1, m.mx + FAR);
+            z0 = Math.max(z0, m.mz - FAR);
+            z1 = Math.min(z1, m.mz + FAR);
             y0 = Math.min(y0, m.box.minY());
             y1 = Math.max(y1, m.box.maxY());
         }
@@ -328,7 +377,7 @@ public final class MonumentSearch {
 
     /** The spot at this block, or null if it's more than 128 blocks (sideways) from a monument's middle. */
     private static Spot spot(List<Monument> ms, int x, int y, int z) {
-        for (Monument m : ms) if ((long) (x - m.x) * (x - m.x) + (long) (z - m.z) * (z - m.z) > FAR2) return null;
+        for (Monument m : ms) if ((long) (x - m.mx) * (x - m.mx) + (long) (z - m.mz) * (z - m.mz) > FAR2) return null;
         int[] covered = new int[ms.size()];
         long total = 0;
         for (int k = 0; k < ms.size(); k++) {
@@ -379,9 +428,9 @@ public final class MonumentSearch {
 
     private static Result result(Spot s, Params p) {
         Result res = new Result();
-        res.kind = Result.Kind.MONUMENTS;
+        res.kind = p.kind() == Kind.HUT ? Result.Kind.HUTS : Result.Kind.MONUMENTS;
         res.dim = Dim.OVERWORLD;
-        res.name = new String[]{"", "Single", "Double", "Triple", "Quad"}[s.monuments.size()] + " monuments";
+        res.name = new String[]{"", "Single", "Double", "Triple", "Quad"}[s.monuments.size()] + " " + p.kind().label;
         res.x = s.x;
         res.y = s.y;
         res.z = s.z;
@@ -405,10 +454,19 @@ public final class MonumentSearch {
         res.details.put("Stand on", s.x + ", " + (s.y - 1) + ", " + s.z);
         res.details.put("Nether", Math.floorDiv(s.x, 8) + ", " + Math.floorDiv(s.z, 8));
         res.details.put("Distance", Fmt.n(p.area().distance(s.x, s.z)));
-        res.ref = new int[s.monuments.size() * 2];
+        // Monuments: chunk corner x, z each (for /locate). Huts: also the box corner and floor height, to check the
+        // hut stands where we say: x, z, boxMinX, y, boxMinZ each.
+        int per = p.kind() == Kind.HUT ? 5 : 2;
+        res.ref = new int[s.monuments.size() * per];
         for (int k = 0; k < s.monuments.size(); k++) {
-            res.ref[k * 2] = s.monuments.get(k).x;
-            res.ref[k * 2 + 1] = s.monuments.get(k).z;
+            Monument m = s.monuments.get(k);
+            res.ref[k * per] = m.x;
+            res.ref[k * per + 1] = m.z;
+            if (per == 5) {
+                res.ref[k * per + 2] = m.box.minX();
+                res.ref[k * per + 3] = m.box.minY();
+                res.ref[k * per + 4] = m.box.minZ();
+            }
         }
         return res;
     }

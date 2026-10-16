@@ -10,8 +10,8 @@ temples, igloos, ancient cities, trial chambers, strongholds, ruined portals, sh
 end cities). Positions use the game's own placement code and biome checks (checked with /locate: 101/101).
 
 Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
-huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots, up to
-the whole world · slime farm AFK spots · nether biomes · biggest nether fortresses (floor area, height, volume).
+huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument and witch hut AFK
+spots (Quad finder), up to the whole world · slime farm AFK spots · nether biomes · biggest nether fortresses (floor area, height, volume).
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
 coordinates.
 
@@ -51,7 +51,10 @@ MIT): an AFK spot counts for a monument when it is within 128 blocks (sideways) 
 by the exact number of guardian spawning blocks in range (more than 24 and at most 128 blocks away, as in
 NaturalSpawner). Regions are scanned in tiles with just the placement maths, only monuments with close neighbours
 get the game's biome check (read point by point, stopping at the first failure), and triples/quads try every block
-for the AFK spot. Whole world, triples, Balanced: about 3 minutes.
+for the AFK spot. Whole world, triples, Balanced: about 3 minutes. Witch huts use the same engine; a hut's height
+is worked out like the game does (average ground under it), on the chunk's terrain with its caves carved
+(`CarvedGround`: the game's own noise fill and carver loop for that chunk). Whole world triple/quad huts: about
+2.5 minutes. Block and fluid tags are read from the game jar too (carvers need them).
 
 Slime farms: spots are ranked by the exact number of blocks a slime can spawn in within range (slime chunk from
 WorldgenRandom.seedSlimeChunk, y -64 to 39, 24 to 128 blocks away, and a biome whose monster list has slimes, looked

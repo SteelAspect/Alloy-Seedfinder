@@ -90,12 +90,17 @@ public final class HutSearch {
         return sum / 9;
     }
 
-    /** Same rule as the game: average ground height (MOTION_BLOCKING_NO_LEAVES) over the whole footprint. */
-    private static int exactY(WorldGen w, BoundingBox b) {
+    /**
+     * Same rule as the game (ScatteredFeaturePiece.updateAverageGroundHeight): the average ground height
+     * (MOTION_BLOCKING_NO_LEAVES) over the whole footprint, on the terrain with its caves carved (a hut always fits
+     * in one chunk).
+     */
+    static int exactY(WorldGen w, BoundingBox b) {
+        int[] ground = CarvedGround.heights(w, new ChunkPos(b.minX() >> 4, b.minZ() >> 4));
         int sum = 0, n = 0;
         for (int z = b.minZ(); z <= b.maxZ(); z++)
             for (int x = b.minX(); x <= b.maxX(); x++) {
-                sum += w.generator.getBaseHeight(x, z, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, w.heights, w.random);
+                sum += ground[(z & 15) * 16 + (x & 15)];
                 n++;
             }
         return sum / n;

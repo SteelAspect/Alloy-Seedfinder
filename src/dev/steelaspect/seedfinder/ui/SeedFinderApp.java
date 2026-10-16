@@ -100,7 +100,7 @@ public final class SeedFinderApp {
         sidebar.item("biomes", "Biomes", "mountain");
         sidebar.item("solid", "Solid areas", "square");
         sidebar.item("huts", "Witch huts", "hut");
-        sidebar.item("monuments", "Monuments", "waves");
+        sidebar.item("monuments", "Quad finder", "waves");
         sidebar.item("slime", "Slime chunks", "slime");
         sidebar.section("Nether");
         sidebar.item("nether", "Nether biomes", "flame");

@@ -6,6 +6,9 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.HolderSet;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.data.registries.VanillaRegistries;
@@ -51,6 +54,9 @@ public final class Mc {
             Bootstrap.bootStrap();
             HolderLookup.Provider l = VanillaRegistries.createLookup();
             bindBiomeTags(l);
+            // Carvers decide what they may cut through by block tags (overworld_carver_replaceables...).
+            bindTags(BuiltInRegistries.BLOCK, Registries.BLOCK, "block");
+            bindTags(BuiltInRegistries.FLUID, Registries.FLUID, "fluid");
             lookup = l;
         }
         return lookup;
@@ -67,8 +73,9 @@ public final class Mc {
      * The code-built registries have no tags (those come from data files), but structure biome checks need them.
      * Reads data/minecraft/tags/worldgen/biome from the game jar and binds them to the biome holders.
      */
-    private static void bindBiomeTags(HolderLookup.Provider lookup) {
-        String prefix = "data/minecraft/tags/worldgen/biome/";
+    /** Every tag in data/minecraft/tags/<folder>/ of the game jar, nested tags resolved: tag id -> member ids. */
+    private static Map<String, Set<String>> readTags(String folder) throws Exception {
+        String prefix = "data/minecraft/tags/" + folder + "/";
         Map<String, List<String>> raw = new HashMap<>();
         try (ZipFile jar = new ZipFile(new File(Biome.class.getProtectionDomain().getCodeSource().getLocation().toURI()))) {
             for (ZipEntry e : Collections.list(jar.entries())) {
@@ -81,8 +88,34 @@ public final class Mc {
                     raw.put(tag, values);
                 }
             }
-            Map<String, Set<String>> resolved = new HashMap<>();
-            for (String tag : raw.keySet()) resolveTag(tag, raw, resolved, new HashSet<>());
+        }
+        Map<String, Set<String>> resolved = new HashMap<>();
+        for (String tag : raw.keySet()) resolveTag(tag, raw, resolved, new HashSet<>());
+        return resolved;
+    }
+
+    /** Binds the jar's tags to a built-in registry (blocks, fluids), which has none outside a real game. */
+    private static <T> void bindTags(Registry<T> registry, ResourceKey<? extends Registry<T>> key, String folder) {
+        try {
+            Map<String, Set<String>> resolved = readTags(folder);
+            Method bind = Holder.Reference.class.getDeclaredMethod("bindTags", Collection.class);
+            bind.setAccessible(true);
+            for (Holder.Reference<T> holder : registry.listElements().toList()) {
+                String id = holder.key().identifier().toString();
+                List<TagKey<T>> tags = new ArrayList<>();
+                resolved.forEach((tag, members) -> {
+                    if (members.contains(id)) tags.add(TagKey.create(key, Identifier.parse(tag)));
+                });
+                bind.invoke(holder, tags);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Couldn't load " + folder + " tags from the Minecraft jar", e);
+        }
+    }
+
+    private static void bindBiomeTags(HolderLookup.Provider lookup) {
+        try {
+            Map<String, Set<String>> resolved = readTags("worldgen/biome");
             Method bind = Holder.Reference.class.getDeclaredMethod("bindTags", Collection.class);
             bind.setAccessible(true);
             for (Holder.Reference<Biome> biome : lookup.lookupOrThrow(Registries.BIOME).listElements().toList()) {

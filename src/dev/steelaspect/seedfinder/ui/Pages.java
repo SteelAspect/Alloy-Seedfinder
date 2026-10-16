@@ -190,7 +190,7 @@ final class Pages {
 
     static final class Huts extends SearchPage {
         Huts(SeedFinderApp app) {
-            super(app, "huts", "Witch huts", "Huts at or below a height. Huts over big cave openings can generate deep underground.");
+            super(app, "huts", "Witch huts", "Huts at or below a height (huts over big cave openings generate deep). For quad huts, see Quad finder.");
         }
 
         @Override
@@ -219,22 +219,29 @@ final class Pages {
 
     static final class Monuments extends SearchPage {
         private static final String[] COUNTS = {"4 · quad", "3 · triple", "2 · double"};
+        private static final String[] KINDS = {"Ocean monuments", "Witch huts"};
 
         Monuments(SeedFinderApp app) {
-            super(app, "monuments", "Monuments", "AFK spots in range of several ocean monuments, ranked by guardian spawning space in range");
+            super(app, "monuments", "Quad finder", "AFK spots in range of 2, 3 or 4 ocean monuments or witch huts, ranked by spawning space in range");
         }
 
         @Override
         protected void buildForm(JPanel form) {
+            combo(form, "kind", "Structure", KINDS, 160);
             JComboBox<String> c = combo(form, "count", "At least", COUNTS, 130);
             c.setSelectedIndex(1);
             areaFields(form, "400k × 400k", true);
             text(form, "minDist", "At least this far out", "0", 150);
         }
 
+        private MonumentSearch.Kind kind() {
+            return value("kind").equals(KINDS[1]) ? MonumentSearch.Kind.HUT : MonumentSearch.Kind.MONUMENT;
+        }
+
         @Override
         protected java.util.Set<String> highlight() {
-            return java.util.Set.of("deep_ocean", "deep_cold_ocean", "deep_lukewarm_ocean", "deep_frozen_ocean");
+            return kind() == MonumentSearch.Kind.HUT ? java.util.Set.of("swamp")
+                    : java.util.Set.of("deep_ocean", "deep_cold_ocean", "deep_lukewarm_ocean", "deep_frozen_ocean");
         }
 
         @Override
@@ -246,9 +253,10 @@ final class Pages {
         protected List<Result> run(Settings.Seed seed, Progress progress) {
             int count = Integer.parseInt(value("count").substring(0, 1));
             Search a = area(seed);
-            // Doubles are common (every few thousand blocks), so a huge search would just find millions of them.
-            if (count == 2 && a.radius() > 1_000_000) throw new BadInput("Doubles are common: search 2M × 2M or less, or pick triple");
-            return MonumentSearch.run(new MonumentSearch.Params(a, count, number("minDist", "the distance"), 50), progress);
+            // Monument doubles are common (every few thousand blocks), so a huge search would just find millions.
+            if (count == 2 && kind() == MonumentSearch.Kind.MONUMENT && a.radius() > 1_000_000)
+                throw new BadInput("Monument doubles are common: search 2M × 2M or less, or pick triple");
+            return MonumentSearch.run(new MonumentSearch.Params(a, kind(), count, number("minDist", "the distance"), 50), progress);
         }
     }
 

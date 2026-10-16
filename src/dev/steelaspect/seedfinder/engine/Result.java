@@ -8,7 +8,7 @@ import java.util.Map;
  * (x, y, z) is where to teleport; the box is what the map outlines; ref is what the verifier checks.
  */
 public final class Result {
-    public enum Kind { AREA, SQUARE, RECTANGLE, HUT, MONUMENTS, FORTRESS, SLIME, STRUCTURE }
+    public enum Kind { AREA, SQUARE, RECTANGLE, HUT, MONUMENTS, FORTRESS, SLIME, STRUCTURE, HUTS }
 
     public Kind kind;
     public Dim dim;

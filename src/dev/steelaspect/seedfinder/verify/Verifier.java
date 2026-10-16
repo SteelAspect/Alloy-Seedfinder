@@ -94,7 +94,10 @@ public final class Verifier {
             Thread reader = new Thread(() -> {
                 try (BufferedReader r = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String l;
-                    while ((l = r.readLine()) != null) lines.add(l);
+                    while ((l = r.readLine()) != null) {
+                        if (LOG) dev.steelaspect.seedfinder.engine.Mc.ERR.println("< " + l);
+                        lines.add(l);
+                    }
                 } catch (IOException ignored) {
                     // Server closed.
                 }
@@ -146,20 +149,20 @@ public final class Verifier {
 
         // 2. Run every check; each one that passes says "SFV P <id>".
         progress.update(0.65, "Checking results");
-        Map<Integer, String> located = new HashMap<>();
-        for (Check c : checks) {
-            if (c.command.contains("locate")) {
-                send(c.command);
-                String hit = waitFor("^\\[[\\d:]+] \\[Server thread/INFO]: .*(is at \\[|Could not find|no structure)", 120, progress);
-                Matcher m = LOCATED.matcher(hit);
-                located.put(c.id, m.find() ? m.group(1) + "," + m.group(2) : "none");
-            } else {
-                send(c.command.replace("%ID%", Integer.toString(c.id)));
-            }
-        }
+        // Block/biome checks first and all their answers collected, then the locates (each waits for its own answer,
+        // which would skip over other lines).
+        for (Check c : checks) if (!c.command.contains("locate")) send(c.command.replace("%ID%", Integer.toString(c.id)));
         send("say SFV S");
         Set<Integer> passed = new HashSet<>();
         for (String[] m : collectUntilSync(120)) if (m[0].equals("P")) passed.add(Integer.parseInt(m[1]));
+        Map<Integer, String> located = new HashMap<>();
+        for (Check c : checks) {
+            if (!c.command.contains("locate")) continue;
+            send(c.command);
+            String hit = waitFor("^\\[[\\d:]+] \\[Server thread/INFO]: .*(is at \\[|Could not find|no structure)", 120, progress);
+            Matcher m = LOCATED.matcher(hit);
+            located.put(c.id, m.find() ? m.group(1) + "," + m.group(2) : "none");
+        }
         for (Check c : checks) if (c.expect != null && c.expect.equals(located.get(c.id))) passed.add(c.id);
 
         // 3. A result is ok when all its points pass (any one allowed biome counts per point).
@@ -206,6 +209,17 @@ public final class Verifier {
                             in + "positioned " + r.ref[p * 2] + " 60 " + r.ref[p * 2 + 1] + " run locate structure minecraft:monument",
                             r.ref[p * 2] + "," + r.ref[p * 2 + 1]));
             }
+            case HUTS -> {
+                // Each hut: /locate finds it, and its floor is at the height we worked out (as for single huts).
+                for (int p = 0; p * 5 < r.ref.length; p++) {
+                    int[] h = java.util.Arrays.copyOfRange(r.ref, p * 5, p * 5 + 5);
+                    out.add(new Check(nextId++, i, p * 2, Dim.OVERWORLD, h[0], h[1], false,
+                            in + "positioned " + h[0] + " 60 " + h[1] + " run locate structure minecraft:swamp_hut", h[0] + "," + h[1]));
+                    for (int[] c : new int[][]{{h[2] + 3, h[4] + 4}, {h[2] + 4, h[4] + 3}})
+                        out.add(new Check(nextId++, i, p * 2 + 1, Dim.OVERWORLD, c[0], c[1], true,
+                                in + "if block " + c[0] + " " + (h[3] + 1) + " " + c[1] + " minecraft:spruce_planks run say SFV P %ID%", null));
+                }
+            }
             case FORTRESS -> out.add(new Check(nextId++, i, 0, Dim.NETHER, r.ref[0], r.ref[1], false,
                     in + "positioned " + r.ref[0] + " 64 " + r.ref[1] + " run locate structure minecraft:fortress", r.ref[0] + "," + r.ref[1]));
         }
@@ -220,7 +234,11 @@ public final class Verifier {
                     "execute in " + r.dim.id + " " + pos + "if biome ~ ~ ~ minecraft:" + b + " run say SFV P %ID%", null));
     }
 
+    /** SEEDFINDER_VERIFY_LOG=1 prints every command and server line (for debugging checks). */
+    private static final boolean LOG = System.getenv("SEEDFINDER_VERIFY_LOG") != null;
+
     private void send(String command) throws IOException {
+        if (LOG) dev.steelaspect.seedfinder.engine.Mc.ERR.println("> " + command);
         stdin.write((command + "\n").getBytes(StandardCharsets.UTF_8));
         stdin.flush();
     }
