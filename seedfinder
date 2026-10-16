@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Cytra Mesa Finder launcher: sets up lib/ from your Minecraft 1.21.11 files (first run only), compiles, runs.
+# Cytra Seed Finder, development launcher (no arguments opens the app). Uses the Minecraft jars from the
+# Fabric Loom cache instead of the first-run download. To build the shareable zip, use ./build.sh.: sets up lib/ from your Minecraft 1.21.11 files (first run only), compiles, runs.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/PrismLauncher/java/java-runtime-delta}"
@@ -23,11 +24,15 @@ if [ ! -f "$LIB/.ready" ]; then
   touch "$LIB/.ready"
 fi
 
-SRC=("$DIR"/src/dev/steelaspect/mesafinder/*.java)
+mapfile -t SRC < <(find "$DIR/src" -name "*.java")
+# The first-run converter libraries (only needed to compile the launcher; Minecraft comes from lib/ here).
+G="$HOME/.gradle/caches/modules-2/files-2.1"
+DEPS="$(ls "$G"/net.fabricmc/tiny-remapper/0.14.1/*/tiny-remapper-0.14.1.jar "$G"/net.fabricmc/mapping-io/0.8.0/*/mapping-io-0.8.0.jar | tr '\n' ':')"
 if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" -name '*.java' -newer "$OUT/.built")" ]; then
   rm -rf "$OUT" && mkdir -p "$OUT"
-  "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*" "${SRC[@]}"
+  "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*:$DEPS" "${SRC[@]}"
+  cp "$DIR"/resources/* "$OUT/"
   touch "$OUT/.built"
 fi
 
-exec "$JAVA_HOME/bin/java" -Xmx${MESA_XMX:-8G} -cp "$OUT:$LIB/*" dev.steelaspect.mesafinder.MesaFinder "$@"
+exec "$JAVA_HOME/bin/java" -Xmx${SEEDFINDER_XMX:-8G} -cp "$OUT:$LIB/*" dev.steelaspect.seedfinder.Main "$@"

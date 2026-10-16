@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cytra Seed Finder: Minecraft's code logs through log4j; only show warnings, and never write log files. -->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="err" target="SYSTEM_ERR">
+            <PatternLayout pattern="[%level] %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Root level="warn">
+            <AppenderRef ref="err"/>
+        </Root>
+    </Loggers>
+</Configuration>

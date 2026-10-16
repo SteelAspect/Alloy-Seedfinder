@@ -1,0 +1,11 @@
+Cytra Seed Finder includes these libraries, unchanged, in the libs/ folder:
+
+  tiny-remapper 0.14.1   FabricMC   LGPL-3.0     https://github.com/FabricMC/tiny-remapper   (LGPL-3.0.txt, GPL-3.0.txt)
+  mapping-io 0.8.0       FabricMC   Apache-2.0   https://github.com/FabricMC/mapping-io      (Apache-2.0.txt)
+  ASM 9.10.1             OW2        BSD-3-Clause https://asm.ow2.io                          (ASM-BSD-3-Clause.txt)
+    (asm, asm-commons, asm-tree, asm-util, asm-analysis)
+
+They're separate jars, so you can swap them for other versions of the same libraries.
+
+Minecraft is not included. On first start the app downloads the official server files from Mojang's servers
+for the user's own computer, the same way launchers and modding tools do.

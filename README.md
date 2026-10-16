@@ -1,52 +1,43 @@
-# Cytra Mesa Finder
+# Cytra Seed Finder
 
-Finds the biggest mesa (badlands) areas for a Minecraft **1.21.11** seed, without running the game.
-It uses Minecraft's own world generator, so the biomes match the real world (checked against a vanilla
-server: 30/30 mesa test points correct).
+A desktop app (and command line) that finds the biggest biomes and the best structures in a Minecraft
+**1.21.11** seed. It runs Minecraft's own world generator, so results match the real game; a **Verify** button
+checks them on a real server with the same seed.
 
-## Run
+Tools: biggest biome areas (mesa by default) · biggest **solid** square/rectangle of a biome · witch huts below
+a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots · nether biomes ·
+biggest nether fortresses (floor area, height, volume).
 
-```bash
-./mesafinder <seed>
-```
+App: dark theme, saved seeds, zoomable biome map with numbered pins, Copy /tp, waypoints to Xaero's minimap
+or `/cway add` commands, CSV and map image export, saved results, and a Speed setting (Fast / Balanced / Light).
 
-First run copies the Minecraft 1.21.11 jars from your Gradle/Loom cache into `lib/` (needs one of the
-1.21.11 mods built once) and compiles. Uses the Java 21 from PrismLauncher (override with `JAVA_HOME`).
+## Sharing it
 
-## Options
+`./build.sh` makes `dist/CytraSeedFinder-<version>.zip` (about 1 MB). Windows users double-click
+`Cytra Seed Finder.bat`; Linux/Mac users run `cytra-seedfinder.sh` (`install-linux.sh` adds an app menu entry).
+Both find Java 21 by themselves, including the one the Minecraft launcher installs.
 
-| Option | Default | Meaning |
-|---|---|---|
-| `--radius <blocks>` | 10000 | how far to search |
-| `--center <x,z>` | 0,0 | where to search around |
-| `--step <blocks>` | 32 | one check every N blocks (smaller = more exact, slower) |
-| `--top <n>` | 15 | how many areas to list |
-| `--min-size <blocks>` | 128 | smallest area to list, as a square side |
-| `--biomes <a,b>` | all 3 badlands | e.g. `eroded_badlands` or `mushroom_fields` |
-| `--large-biomes` / `--amplified` | | world type |
-| `--map <file>` / `--no-map` | `mesa-<seed>.png` | map picture |
+No Minecraft code is in the zip. On first start the app downloads the official 1.21.11 server jar and mappings
+from Mojang (about 70 MB, checked by SHA-1), unpacks the libraries and converts the game code to Mojang's names
+with tiny-remapper, into the app's data folder. The converter libraries ship in `libs/` with their licenses.
 
-Speed: radius 20000 (1.5M checks) takes about 8 s.
-
-## Witch huts and ocean monuments
+## Development
 
 ```bash
-./mesafinder huts <seed> --max-y -50          # huts at or below y -50, with their real height
-./mesafinder monuments <seed> --min 3          # triple (3) or quad (4) monument AFK spots
+./seedfinder                      # open the app (uses the Minecraft jars from the Fabric Loom cache, lib/)
+./seedfinder huts <seed> --max-y -50
+./seedfinder --help
+./build.sh                        # build the shareable zip
 ```
 
-Both use the game's own structure placement and biome checks. A witch hut's height is the average ground
-height over its 7x9 footprint (same rule as the game), so huts over big cave openings can generate deep
-underground. Checked against a real server: 6/6 huts at the exact floor height, including one at y -53.
-```bash
-./mesafinder fortresses <seed> --center 9500000,0 --radius 500000 --min-dist 9000000
-```
+Code: `engine/` (searches, world generator access), `ui/` (Swing app), `launcher/` (Java check, first-run
+download and conversion, class loader), `verify/` (test server checks), `export/`, `store/`.
 
-Biggest nether fortresses (nether coordinates), ranked by floor area of the fortress pieces (where wither
-skeletons spawn). Copies the game's fortress-or-bastion pick for each spot, including bastions that fall back
-to a fortress in basalt deltas. Checked against a real server: 19/19 spots right (kind and position).
+Gotchas: fortress pieces share static counters in Minecraft's code, so fortresses are built one at a time.
+The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection.
+`seedfinder screenshot <file> [page|search:<page>]` draws the window to a PNG without showing it.
 
-Options: `--radius` (default 100000), `--center x,z`, `--top`, `--details` (monument centres).
+## Files
 
-Output lists each area's centre (always inside the biome), box size, area, distance, and the share of
-plain / eroded (spikes) / wooded badlands. The map shows matches in orange with rank numbers.
+Settings: `~/.config/cytra-seedfinder` (Windows `%APPDATA%\CytraSeedFinder`). Saved results and Minecraft files:
+`~/.local/share/cytra-seedfinder` (Windows `%LOCALAPPDATA%\CytraSeedFinder`).
