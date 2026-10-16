@@ -27,6 +27,8 @@ public final class Result {
     public Map<String, String> details = new LinkedHashMap<>();
     /** Points or positions the verifier checks, kind-specific (see Verifier). */
     public int[] ref;
+    /** Structure id for structure results, e.g. "minecraft:village_plains" (Verify locates it). */
+    public String structure;
     /** Biomes allowed at the ref points (biome results). */
     public String[] biomes;
     /** Set after "Verify": "ok", "fail" or a message. */

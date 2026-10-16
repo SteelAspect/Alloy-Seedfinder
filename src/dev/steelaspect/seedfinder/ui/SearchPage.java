@@ -275,6 +275,16 @@ public abstract class SearchPage extends JPanel {
         }
     }
 
+    /** The centre field with this radius (pages without a size box). */
+    protected Search areaFrom(Settings.Seed seed, int radius) {
+        String[] p = value("center").split("[,\\s]+");
+        try {
+            return new Search(seed.value(), seed.type, Integer.parseInt(p[0].trim()), Integer.parseInt(p[1].trim()), radius);
+        } catch (RuntimeException e) {
+            throw new BadInput("Enter the centre as two numbers, like 0, 0");
+        }
+    }
+
     /** The search square from the centre and size fields. */
     protected Search area(Settings.Seed seed) {
         String[] p = value("center").split("[,\\s]+");

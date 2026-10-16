@@ -83,8 +83,8 @@ public final class StructureLayers {
         }
     }
 
-    /** One structure on the map. name is the structure id, e.g. "village_plains". */
-    public record Icon(Layer layer, String name, int x, int y, int z) {
+    /** One structure on the map. name is the structure id, e.g. "village_plains"; (cx, cz) its start chunk. */
+    public record Icon(Layer layer, String name, int x, int y, int z, int cx, int cz) {
         public String label() {
             return Fmt.biome(name);
         }
@@ -117,25 +117,41 @@ public final class StructureLayers {
                     int bx = chunk.getMinBlockX(), bz = chunk.getMinBlockZ();
                     if (bx < minX - 15 || bx > maxX || bz < minZ - 15 || bz > maxZ) continue;
                     if (!placement.isStructureChunk(c.state, chunk.x, chunk.z)) continue;
-                    Icon icon = pick(c, set.value(), chunk);
-                    if (icon != null && (layer.only == null || icon.name.equals(layer.only))) out.add(new Icon(layer, icon.name, icon.x, icon.y, icon.z));
+                    Found f = pick(c, set.value(), chunk);
+                    if (f != null && (layer.only == null || f.name.equals(layer.only))) out.add(f.icon(layer, chunk));
                 }
         } else if (placement instanceof ConcentricRingsStructurePlacement rings) {
             for (ChunkPos chunk : c.state.getRingPositionsFor(rings)) {
                 int bx = chunk.getMinBlockX(), bz = chunk.getMinBlockZ();
                 if (bx < minX - 15 || bx > maxX || bz < minZ - 15 || bz > maxZ) continue;
-                Icon icon = pick(c, set.value(), chunk);
-                if (icon != null) out.add(new Icon(layer, icon.name, icon.x, icon.y, icon.z));
+                Found f = pick(c, set.value(), chunk);
+                if (f != null) out.add(f.icon(layer, chunk));
             }
         }
         return out;
+    }
+
+    /** A structure that starts in a chunk: its id and the game's generation stub (position, and pieces on demand). */
+    public record Found(String name, Structure.GenerationStub stub) {
+        Icon icon(Layer layer, ChunkPos chunk) {
+            var p = stub.position();
+            return new Icon(layer, name, p.getX(), p.getY(), p.getZ(), chunk.x, chunk.z);
+        }
+    }
+
+    /** The structure of this layer's set that starts in the chunk (any of the set's structures), or null. */
+    public static Found at(WorldGen w, Layer layer, ChunkPos chunk) {
+        Context c = context(w);
+        StructureSet set = w.lookup.lookupOrThrow(Registries.STRUCTURE_SET).getOrThrow(layer.set).value();
+        if (!set.placement().isStructureChunk(c.state, chunk.x, chunk.z)) return null;
+        return pick(c, set, chunk);
     }
 
     /**
      * Which structure of the set starts in this chunk: the game tries the set's structures in a weighted random
      * order (same random as ChunkGenerator.createStructures) and takes the first whose spot is valid.
      */
-    private static Icon pick(Context c, StructureSet set, ChunkPos chunk) {
+    private static Found pick(Context c, StructureSet set, ChunkPos chunk) {
         List<StructureSet.StructureSelectionEntry> entries = new ArrayList<>(set.structures());
         if (entries.size() == 1) return tryOne(c, entries.get(0).structure(), chunk);
         WorldgenRandom random = new WorldgenRandom(new LegacyRandomSource(0L));
@@ -150,23 +166,50 @@ public final class StructureLayers {
                 k++;
             }
             StructureSet.StructureSelectionEntry e = entries.get(k);
-            Icon icon = tryOne(c, e.structure(), chunk);
-            if (icon != null) return icon;
+            Found f = tryOne(c, e.structure(), chunk);
+            if (f != null) return f;
             entries.remove(k);
             total -= e.weight();
         }
         return null;
     }
 
-    private static Icon tryOne(Context c, Holder<Structure> structure, ChunkPos chunk) {
+    /**
+     * Held while the game's template code reads a template's jigsaw blocks: StructureTemplate.Palette fills an
+     * unsynchronised cache, and two threads at once break it (ConcurrentModificationException).
+     */
+    public static final Object TEMPLATE_LOCK = new Object();
+    private static final Map<Structure, Boolean> NAMED_START = new ConcurrentHashMap<>();
+
+    /** Jigsaw structures that pick their start by a named jigsaw block (ancient cities) read templates to place. */
+    private static boolean namedStart(Structure s) {
+        return NAMED_START.computeIfAbsent(s, k -> {
+            if (!(k instanceof net.minecraft.world.level.levelgen.structure.structures.JigsawStructure)) return false;
+            try {
+                java.lang.reflect.Field f = k.getClass().getDeclaredField("startJigsawName");
+                f.setAccessible(true);
+                return ((Optional<?>) f.get(k)).isPresent();
+            } catch (ReflectiveOperationException e) {
+                return true;
+            }
+        });
+    }
+
+    private static Found tryOne(Context c, Holder<Structure> structure, ChunkPos chunk) {
         WorldGen w = c.world;
         Structure.GenerationContext ctx = new Structure.GenerationContext(c.registries, w.generator, w.source, w.random, templates(),
                 w.seed, chunk, w.heights, structure.value().biomes()::contains);
-        Optional<Structure.GenerationStub> stub = structure.value().findValidGenerationPoint(ctx);
+        Optional<Structure.GenerationStub> stub;
+        if (namedStart(structure.value())) {
+            synchronized (TEMPLATE_LOCK) {
+                stub = structure.value().findValidGenerationPoint(ctx);
+            }
+        } else {
+            stub = structure.value().findValidGenerationPoint(ctx);
+        }
         if (stub.isEmpty()) return null;
         String name = structure.unwrapKey().map(k -> k.identifier().getPath()).orElse("structure");
-        var p = stub.get().position();
-        return new Icon(null, name, p.getX(), p.getY(), p.getZ());
+        return new Found(name, stub.get());
     }
 
     private static Context context(WorldGen w) {

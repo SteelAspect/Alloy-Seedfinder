@@ -11,7 +11,8 @@ end cities). Positions use the game's own placement code and biome checks (check
 
 Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
 huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument and witch hut AFK
-spots (Quad finder), up to the whole world · slime farm AFK spots · nether biomes · biggest nether fortresses (floor area, height, volume).
+spots (Quad finder), up to the whole world · slime farm AFK spots · nearest structures of a kind (village types,
+treasure bastions, end cities with a ship and where its elytra hangs) · nether biomes · biggest nether fortresses (floor area, height, volume).
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
 coordinates.
 
@@ -62,6 +63,11 @@ up per block with the game's BiomeManager, so deep dark and mushroom fields don'
 slime chunks within 8 chunks, the best 300 are climbed to the best block and height, the best 60 recounted with
 biomes. Counts match a plain loop over every block (12/12 spots); the #1 spot matches trying every 4th block over
 20k x 20k on two seeds. 400k x 400k: 13 s, 2M x 2M: 87 s (Balanced).
+
+Nearest structures: rings of regions outwards from the point, with the map icons' placement code; bastion type and
+end city ships come from the game building the pieces (the ship's "Elytra" data marker gives the item frame spot).
+Verify uses /locate, plus the elytra item frame for ships (all 13 kinds 8/8, ships 6/6). The game's template code has
+an unsynchronised cache (StructureTemplate.Palette), so jigsaw lookups by name and piece builds take a lock.
 
 Gotchas: fortress pieces share static counters in Minecraft's code (FortressBuilder gives each fortress its own).
 The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection, and

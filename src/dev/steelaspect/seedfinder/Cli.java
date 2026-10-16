@@ -6,6 +6,7 @@ import dev.steelaspect.seedfinder.engine.FortressSearch;
 import dev.steelaspect.seedfinder.engine.HutSearch;
 import dev.steelaspect.seedfinder.engine.Mc;
 import dev.steelaspect.seedfinder.engine.MonumentSearch;
+import dev.steelaspect.seedfinder.engine.NearestSearch;
 import dev.steelaspect.seedfinder.engine.SlimeSearch;
 import dev.steelaspect.seedfinder.engine.Progress;
 import dev.steelaspect.seedfinder.engine.Result;
@@ -44,6 +45,7 @@ final class Cli {
               seedfinder monuments <seed> [--min 3] [--min-dist 0]                     double/triple/quad monument AFK spots
               seedfinder quadhuts <seed> [--min 2] [--min-dist 0]                      double/triple/quad witch hut AFK spots
               seedfinder slime <seed>                                                  best slime farm AFK spots
+              seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
               seedfinder fortresses <seed> [--min-dist 0]                              biggest nether fortresses
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
@@ -109,6 +111,9 @@ final class Cli {
                     m.equals("quadhuts") ? MonumentSearch.Kind.HUT : MonumentSearch.Kind.MONUMENT,
                     Integer.parseInt(opt.getOrDefault("--min", m.equals("quadhuts") ? "2" : "3")), Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
             case "slime" -> SlimeSearch.run(new SlimeSearch.Params(area, top), p);
+            case "nearest" -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type,
+                    NearestSearch.Target.valueOf(opt.getOrDefault("--type", "VILLAGE").toUpperCase(Locale.ROOT)), area.centerX(), area.centerZ(),
+                    Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);
             case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
             default -> {
                 System.err.println("Unknown command " + m);

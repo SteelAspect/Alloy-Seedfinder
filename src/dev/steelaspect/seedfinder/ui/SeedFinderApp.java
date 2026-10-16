@@ -82,7 +82,7 @@ public final class SeedFinderApp {
 
         mapPage = new MapPage(this);
         add("map", mapPage);
-        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this),
+        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this), new Pages.Nearest(this),
                 new Pages.Nether(this), new Pages.Fortresses(this))) {
             p.build();
             searchPages.add(p);
@@ -96,6 +96,7 @@ public final class SeedFinderApp {
 
         sidebar.section("Explore");
         sidebar.item("map", "Map", "map");
+        sidebar.item("nearest", "Nearest structures", "list");
         sidebar.section("Overworld");
         sidebar.item("biomes", "Biomes", "mountain");
         sidebar.item("solid", "Solid areas", "square");

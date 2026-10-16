@@ -5,6 +5,7 @@ import dev.steelaspect.seedfinder.engine.Dim;
 import dev.steelaspect.seedfinder.engine.FortressSearch;
 import dev.steelaspect.seedfinder.engine.HutSearch;
 import dev.steelaspect.seedfinder.engine.MonumentSearch;
+import dev.steelaspect.seedfinder.engine.NearestSearch;
 import dev.steelaspect.seedfinder.engine.Progress;
 import dev.steelaspect.seedfinder.engine.Result;
 import dev.steelaspect.seedfinder.engine.Search;
@@ -257,6 +258,57 @@ final class Pages {
             if (count == 2 && kind() == MonumentSearch.Kind.MONUMENT && a.radius() > 1_000_000)
                 throw new BadInput("Monument doubles are common: search 2M × 2M or less, or pick triple");
             return MonumentSearch.run(new MonumentSearch.Params(a, kind(), count, number("minDist", "the distance"), 50), progress);
+        }
+    }
+
+    // ------------------------------------------------------------------ nearest structures
+
+    static final class Nearest extends SearchPage {
+        private static final Map<String, Integer> WITHIN = new LinkedHashMap<>();
+
+        static {
+            WITHIN.put("10k blocks", 10_000);
+            WITHIN.put("50k blocks", 50_000);
+            WITHIN.put("200k blocks", 200_000);
+            WITHIN.put("1M blocks", 1_000_000);
+            WITHIN.put("5M blocks", 5_000_000);
+            WITHIN.put("Whole world", 30_000_000);
+        }
+
+        Nearest(SeedFinderApp app) {
+            super(app, "nearest", "Nearest structures", "The closest structures of a kind: village types, treasure bastions, end cities with a ship...");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            String[] names = java.util.Arrays.stream(NearestSearch.Target.values()).map(x -> x.label).toArray(String[]::new);
+            combo(form, "target", "Structure", names, 210);
+            text(form, "center", "From x, z", "0, 0", 150);
+            combo(form, "count", "How many", new String[]{"10", "25", "50", "100"}, 90).setSelectedIndex(1);
+            combo(form, "within", "Within", WITHIN.keySet().toArray(String[]::new), 140).setSelectedIndex(3);
+        }
+
+        private NearestSearch.Target target() {
+            for (NearestSearch.Target t : NearestSearch.Target.values()) if (t.label.equals(value("target"))) return t;
+            return NearestSearch.Target.VILLAGE;
+        }
+
+        @Override
+        protected Search area(Settings.Seed seed) {
+            Search a = super.areaFrom(seed, WITHIN.getOrDefault(value("within"), 1_000_000));
+            return a;
+        }
+
+        @Override
+        protected Dim dim() {
+            return target().dim();
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) {
+            Search a = area(seed);
+            return NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type, target(), a.centerX(), a.centerZ(),
+                    Integer.parseInt(value("count")), a.radius()), progress);
         }
     }
 

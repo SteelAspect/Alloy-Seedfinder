@@ -143,6 +143,17 @@ public final class ResultsTable extends JTable {
             fireTableStructureChanged();
         }
 
+        /** What the size column holds for these results. */
+        private String sizeName() {
+            if (rows.isEmpty()) return "Size";
+            return switch (rows.get(0).kind) {
+                case STRUCTURE -> "Distance";
+                case MONUMENTS, HUTS, SLIME -> "Spawn blocks";
+                case FORTRESS -> "Floor area";
+                default -> "Size";
+            };
+        }
+
         @Override
         public int getRowCount() {
             return rows.size();
@@ -159,7 +170,7 @@ public final class ResultsTable extends JTable {
             if (nameColumn && c == 1) return "Name";
             int k = c - (nameColumn ? 2 : 1);
             if (k == 0) return "Coords";
-            if (k == 1) return "Size";
+            if (k == 1) return sizeName();
             if (k - 2 < keys.size()) return keys.get(k - 2);
             return "Check";
         }
@@ -167,15 +178,14 @@ public final class ResultsTable extends JTable {
         @Override
         public Object getValueAt(int row, int c) {
             Result r = rows.get(row);
-            String col = getColumnName(c);
-            return switch (col) {
-                case "#" -> row + 1;
-                case "Name" -> r.name.contains("+") ? "Mesa" : r.name.contains("_") || Character.isLowerCase(r.name.charAt(0)) ? Fmt.biome(r.name) : r.name;
-                case "Coords" -> r.coords();
-                case "Size" -> r.size;
-                case "Check" -> r.verified == null ? "" : r.verified;
-                default -> r.details.getOrDefault(col, "");
-            };
+            // By position: the size column's name changes per tool and can match a detail column's name.
+            int k = c - (nameColumn ? 2 : 1);
+            if (c == 0) return row + 1;
+            if (nameColumn && c == 1) return r.name.contains("+") ? "Mesa" : r.name.contains("_") || Character.isLowerCase(r.name.charAt(0)) ? Fmt.biome(r.name) : r.name;
+            if (k == 0) return r.coords();
+            if (k == 1) return r.size;
+            if (k - 2 < keys.size()) return r.details.getOrDefault(keys.get(k - 2), "");
+            return r.verified == null ? "" : r.verified;
         }
     }
 }
