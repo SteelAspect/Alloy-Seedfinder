@@ -43,9 +43,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class FortressSearch {
     /**
      * Fortress pieces share static counters (NetherFortressPieces.PieceWeight.placeCount), so two fortresses built at
-     * the same time corrupt each other's size. They are built one at a time.
+     * the same time through the game's normal path corrupt each other's size. {@link FortressBuilder} gives each
+     * fortress private counters so they can be built on every core; the old one-at-a-time path stays as a fallback.
      */
     private static final Object LOCK = new Object();
+    /** Use the old one-at-a-time path (also used automatically if FortressBuilder can't work on this version). */
+    public static volatile boolean serial;
     private static final int KEEP = 300;
     private static final Map<Identifier, Vec3i> TEMPLATE_SIZES = new ConcurrentHashMap<>();
     private static final Method TEMPLATE_BOX;
@@ -82,17 +85,24 @@ public final class FortressSearch {
                 int x = chunk.getMinBlockX(), z = chunk.getMinBlockZ();
                 if (!p.area().inside(x, z) || Math.max(Math.abs(x), Math.abs(z)) < p.minDist()) continue;
                 if (!isFortress(w, chunk, starts, bastion)) continue;
-                StructureStart s;
-                synchronized (LOCK) {
-                    s = Structures.start(w, fortress, chunk, false);
+                List<StructurePiece> pieceList;
+                if (serial || !FortressBuilder.AVAILABLE) {
+                    StructureStart s;
+                    synchronized (LOCK) {
+                        s = Structures.start(w, fortress, chunk, false);
+                    }
+                    if (s == null) continue;
+                    pieceList = s.getPieces();
+                } else {
+                    pieceList = FortressBuilder.build(w.seed, chunk);
                 }
-                if (s == null) continue;
-                BoundingBox all = s.getBoundingBox();
+                if (pieceList.isEmpty()) continue;
+                BoundingBox all = new net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer(pieceList).calculateBoundingBox();
                 if (Math.max(Math.max(Math.abs(all.minX()), Math.abs(all.maxX())), Math.max(Math.abs(all.minZ()), Math.abs(all.maxZ()))) > Structures.WORLD_EDGE)
                     continue; // sticks out past the edge of the world
                 long area = 0;
                 List<BoundingBox> parts = new ArrayList<>();
-                for (StructurePiece piece : s.getPieces()) {
+                for (StructurePiece piece : pieceList) {
                     BoundingBox b = piece.getBoundingBox();
                     parts.add(b);
                     area += (long) b.getXSpan() * b.getZSpan();

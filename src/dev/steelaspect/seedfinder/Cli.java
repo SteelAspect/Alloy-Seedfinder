@@ -46,6 +46,7 @@ final class Cli {
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
                              --top n (default 25)  --min-size blocks (biomes)  --large-biomes / --amplified
                              --speed fast|balanced|light (default fast)
+                             --serial-fortresses   build fortresses one at a time the old way (same results, slower)
                              --exact   skip the quick first pass for biome/solid searches (same results, about 2x slower)
                              --verify n --accept-eula   check the first n results on a real server (accepts the Minecraft EULA)
             """;
@@ -73,6 +74,7 @@ final class Cli {
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
             else if (a.equals("--nether") || a.equals("--joined") || a.equals("--accept-eula")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
+            else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
             else if (a.equals("--speed") && i + 1 < args.length) Workers.set(Workers.Speed.valueOf(args[++i].toUpperCase(Locale.ROOT)));
             else if (a.startsWith("--") && i + 1 < args.length) opt.put(a, args[++i]);
             else {
