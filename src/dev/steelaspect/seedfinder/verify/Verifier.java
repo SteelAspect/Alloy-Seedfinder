@@ -34,7 +34,11 @@ import java.util.stream.Stream;
  * "execute if block", structures with "locate". The server runs hidden in a cache folder and is deleted afterwards.
  */
 public final class Verifier {
-    private static final Pattern SAY = Pattern.compile("\\[Server] SFV (\\S+)(?: (.*))?$");
+    /**
+     * Only lines the server console itself printed count. Console /say shows as "[Not Secure] [Server] ..." since
+     * 1.19; player chat would show as "<name> ...", so it can't fake this (and nobody can join anyway).
+     */
+    private static final Pattern SAY = Pattern.compile("^\\[[\\d:]+] \\[Server thread/INFO]: (?:\\[Not Secure] )?\\[Server] SFV (\\S+)(?: (.*))?$");
     private static final Pattern LOCATED = Pattern.compile("is at \\[(-?\\d+), [^,]+, (-?\\d+)]");
     private static final int GRID = 7;
 
@@ -78,7 +82,9 @@ public final class Verifier {
                     case AMPLIFIED -> "amplified";
                     case NORMAL -> "normal";
                 },
-                "online-mode=false", "server-port=" + port, "view-distance=3", "simulation-distance=3",
+                // Only reachable from this computer, and nobody may join: it exists just to answer our commands.
+                "server-ip=127.0.0.1", "white-list=true", "enforce-whitelist=true", "enable-query=false", "enable-rcon=false",
+                "max-players=1", "online-mode=false", "server-port=" + port, "view-distance=3", "simulation-distance=3",
                 "spawn-protection=0", "sync-chunk-writes=false", "pause-when-empty-seconds=0", "max-tick-time=-1", ""));
         try {
             progress.update(0.02, "Starting a test server");
@@ -95,7 +101,7 @@ public final class Verifier {
             }, "verify-server-output");
             reader.setDaemon(true);
             reader.start();
-            waitFor("Done \\(", 240, progress);
+            waitFor("^\\[[\\d:]+] \\[Server thread/INFO]: Done \\(", 240, progress);
             run(results, progress);
         } finally {
             if (process != null) {
@@ -144,7 +150,7 @@ public final class Verifier {
         for (Check c : checks) {
             if (c.command.contains("locate")) {
                 send(c.command);
-                String hit = waitFor("is at \\[|Could not find|no structure", 120, progress);
+                String hit = waitFor("^\\[[\\d:]+] \\[Server thread/INFO]: .*(is at \\[|Could not find|no structure)", 120, progress);
                 Matcher m = LOCATED.matcher(hit);
                 located.put(c.id, m.find() ? m.group(1) + "," + m.group(2) : "none");
             } else {
