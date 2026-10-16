@@ -40,7 +40,7 @@ final class Cli {
               seedfinder nether <seed>                                                 biggest area of each nether biome
               seedfinder solid <seed> --biomes crimson_forest [--nether]               10 biggest solid squares + rectangles
               seedfinder huts <seed> [--max-y -50]                                     witch huts at or below a height
-              seedfinder monuments <seed> [--min 3]                                    double/triple/quad monument spots
+              seedfinder monuments <seed> [--min 3] [--min-dist 0]                     double/triple/quad monument AFK spots
               seedfinder fortresses <seed> [--min-dist 0]                              biggest nether fortresses
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
@@ -102,7 +102,8 @@ final class Cli {
             case "solid" -> SolidSearch.run(new SolidSearch.Params(area, opt.containsKey("--nether") ? Dim.NETHER : Dim.OVERWORLD, step,
                     biomes == null ? List.of("badlands") : biomes), p);
             case "huts" -> HutSearch.run(new HutSearch.Params(area, Integer.parseInt(opt.getOrDefault("--max-y", "-50")), top), p);
-            case "monuments" -> MonumentSearch.run(new MonumentSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min", "3")), top), p);
+            case "monuments" -> MonumentSearch.run(new MonumentSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min", "3")),
+                    Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
             case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
             default -> {
                 System.err.println("Unknown command " + m);

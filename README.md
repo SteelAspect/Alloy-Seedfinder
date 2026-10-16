@@ -9,9 +9,9 @@ the cursor, a go-to box and 16 switchable structure icon layers (villages, monum
 temples, igloos, ancient cities, trial chambers, strongholds, ruined portals, shipwrecks, fortresses, bastions,
 end cities). Positions use the game's own placement code and biome checks (checked with /locate: 101/101).
 
-Tools: biggest biome areas (mesa by default) · biggest **solid** square/rectangle of a biome · witch huts below
-a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots · nether biomes ·
-biggest nether fortresses (floor area, height, volume).
+Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
+huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument AFK spots, up to
+the whole world · nether biomes · biggest nether fortresses (floor area, height, volume).
 
 App: dark theme, saved seeds, zoomable biome map with numbered pins, Copy /tp, waypoints to Xaero's minimap
 or `/cway add` commands, CSV and map image export, saved results, and a Speed setting (Fast / Balanced / Light).
@@ -43,6 +43,13 @@ tiles first, and are cached on disk (500 MB cap, Clear map cache in Settings). B
 passes (fixed height everywhere, then exact lookups on candidates plus a 2-cell margin): about 2x faster with
 identical results (`--exact` skips the first pass). Fortresses are built on every core with private piece
 counters (`FortressBuilder`; `--serial-fortresses` is the old path), identical on 2000 compared fortresses.
+
+Monuments (ideas from [DoubleTripleQuadMonumentFinder](https://github.com/BrianBLee1201/DoubleTripleQuadMonumentFinder),
+MIT): an AFK spot counts for a monument when it is within 128 blocks (sideways) of its middle, and spots are ranked
+by the exact number of guardian spawning blocks in range (more than 24 and at most 128 blocks away, as in
+NaturalSpawner). Regions are scanned in tiles with just the placement maths, only monuments with close neighbours
+get the game's biome check (read point by point, stopping at the first failure), and triples/quads try every block
+for the AFK spot. Whole world, triples, Balanced: about 3 minutes.
 
 Gotchas: fortress pieces share static counters in Minecraft's code (FortressBuilder gives each fortress its own).
 The code-built registries have no tags, so biome tags are read from the game jar and bound by reflection, and

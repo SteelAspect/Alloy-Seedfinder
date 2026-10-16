@@ -220,14 +220,15 @@ final class Pages {
         private static final String[] COUNTS = {"4 · quad", "3 · triple", "2 · double"};
 
         Monuments(SeedFinderApp app) {
-            super(app, "monuments", "Monuments", "Spots where several ocean monuments are in range of one AFK spot");
+            super(app, "monuments", "Monuments", "AFK spots in range of several ocean monuments, ranked by guardian spawning space in range");
         }
 
         @Override
         protected void buildForm(JPanel form) {
             JComboBox<String> c = combo(form, "count", "At least", COUNTS, 130);
             c.setSelectedIndex(1);
-            areaFields(form, "400k × 400k");
+            areaFields(form, "400k × 400k", true);
+            text(form, "minDist", "At least this far out", "0", 150);
         }
 
         @Override
@@ -243,7 +244,10 @@ final class Pages {
         @Override
         protected List<Result> run(Settings.Seed seed, Progress progress) {
             int count = Integer.parseInt(value("count").substring(0, 1));
-            return MonumentSearch.run(new MonumentSearch.Params(area(seed), count, 50), progress);
+            Search a = area(seed);
+            // Doubles are common (every few thousand blocks), so a huge search would just find millions of them.
+            if (count == 2 && a.radius() > 1_000_000) throw new BadInput("Doubles are common: search 2M × 2M or less, or pick triple");
+            return MonumentSearch.run(new MonumentSearch.Params(a, count, number("minDist", "the distance"), 50), progress);
         }
     }
 

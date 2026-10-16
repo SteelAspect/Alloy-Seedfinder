@@ -61,6 +61,15 @@ public abstract class SearchPage extends JPanel {
         SIZES.put("2M × 2M", 1_000_000);
     }
 
+    /** Extra sizes for tools that can search far (only the placement maths runs everywhere). */
+    protected static final Map<String, Integer> BIG_SIZES = new LinkedHashMap<>();
+
+    static {
+        BIG_SIZES.put("10M × 10M", 5_000_000);
+        BIG_SIZES.put("20M × 20M", 10_000_000);
+        BIG_SIZES.put("Whole world", 30_000_000);
+    }
+
     protected final SeedFinderApp app;
     public final String id;
     public final String title;
@@ -227,8 +236,15 @@ public abstract class SearchPage extends JPanel {
 
     /** Centre and size fields shared by most tools. */
     protected void areaFields(JPanel form, String defaultSize) {
+        areaFields(form, defaultSize, false);
+    }
+
+    /** big: also offer the BIG_SIZES. */
+    protected void areaFields(JPanel form, String defaultSize, boolean big) {
         text(form, "center", "Centre x, z", "0, 0", 150);
-        JComboBox<String> size = combo(form, "size", "Search size", SIZES.keySet().toArray(String[]::new), 140);
+        List<String> sizes = new ArrayList<>(SIZES.keySet());
+        if (big) sizes.addAll(BIG_SIZES.keySet());
+        JComboBox<String> size = combo(form, "size", "Search size", sizes.toArray(String[]::new), 140);
         size.setSelectedItem(defaultSize);
     }
 
@@ -258,7 +274,7 @@ public abstract class SearchPage extends JPanel {
         } catch (RuntimeException e) {
             throw new BadInput("Enter the centre as two numbers, like 0, 0");
         }
-        Integer radius = SIZES.get(value("size"));
+        Integer radius = SIZES.getOrDefault(value("size"), BIG_SIZES.get(value("size")));
         return new Search(seed.value(), seed.type, cx, cz, radius == null ? 50_000 : radius);
     }
 
