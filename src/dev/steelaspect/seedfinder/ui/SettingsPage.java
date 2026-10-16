@@ -51,7 +51,10 @@ final class SettingsPage extends JPanel {
         column.add(gap());
         column.add(section("Verify", "Verify starts a hidden vanilla 1.21.11 server with your seed to check results, then deletes it.", verifyPanel()));
         column.add(gap());
-        column.add(section("Files", "Settings: " + Settings.FILE + "\nSaved results: " + History.DIR, null));
+        column.add(section("Map", "Map tiles you've looked at are kept on disk so they draw instantly next time (up to "
+                + TileCache.LIMIT / 1024 / 1024 + " MB, oldest removed first).", mapPanel()));
+        column.add(gap());
+        column.add(section("Files", "Settings: " + Settings.FILE + "\nSaved results: " + History.DIR + "\nMap cache: " + TileCache.DIR, null));
         JPanel holder = Ui.clear(new BorderLayout());
         holder.add(column, BorderLayout.NORTH);
         javax.swing.JScrollPane scroll = Ui.scroll(holder);
@@ -156,6 +159,26 @@ final class SettingsPage extends JPanel {
         return p;
     }
 
+    private final JLabel cacheSize = Ui.muted(" ");
+
+    private JComponent mapPanel() {
+        Ui.FlatButton clear = Ui.button("Clear map cache", "trash", Ui.Kind.SECONDARY);
+        clear.addActionListener(e -> {
+            MapView.clearCache();
+            cacheSize.setText("Map cache cleared");
+        });
+        return Ui.row(12, clear, cacheSize);
+    }
+
+    private void showCacheSize() {
+        Thread t = new Thread(() -> {
+            long bytes = MapView.cacheSize();
+            javax.swing.SwingUtilities.invokeLater(() -> cacheSize.setText(String.format(java.util.Locale.ROOT, "Using %.1f MB", bytes / 1048576.0)));
+        }, "cache-size");
+        t.setDaemon(true);
+        t.start();
+    }
+
     private JComponent verifyPanel() {
         serverJar.setPreferredSize(new Dimension(520, 34));
         Ui.FlatButton browse = Ui.button("Browse", null, Ui.Kind.SECONDARY);
@@ -190,6 +213,7 @@ final class SettingsPage extends JPanel {
         eula.setSelected(s.eulaAccepted);
         serverJar.setText(s.serverJar);
         saved.setText(" ");
+        showCacheSize();
     }
 
     private void save() {

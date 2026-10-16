@@ -1,6 +1,5 @@
 package dev.steelaspect.seedfinder.ui;
 
-import dev.steelaspect.seedfinder.engine.BiomeColors;
 import dev.steelaspect.seedfinder.engine.Dim;
 import dev.steelaspect.seedfinder.engine.Fmt;
 import dev.steelaspect.seedfinder.engine.Result;
@@ -37,38 +36,32 @@ import java.util.function.IntConsumer;
  * Tiles are 256 px, drawn on background threads; zoom steps double the blocks per pixel.
  */
 public final class MapView extends JComponent {
-    private static final int TILE = 256;
+    private static final int TILE = TileRenderer.TILE;
     private static final int MIN_LEVEL = 0, MAX_LEVEL = 14;
-    private static final java.util.concurrent.ThreadPoolExecutor RENDER = new java.util.concurrent.ThreadPoolExecutor(2, 2, 30,
-            java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.LinkedBlockingQueue<>(), r -> {
-        Thread t = new Thread(r, "map-tiles");
-        t.setDaemon(true);
-        t.setPriority(Thread.MIN_PRIORITY);
-        return t;
-    });
 
     /** Map drawing follows the speed setting too (one thread fewer than searches, at least one). */
     public static void setThreads(int n) {
-        int t = Math.max(1, n - 1);
-        if (t > RENDER.getMaximumPoolSize()) {
-            RENDER.setMaximumPoolSize(t);
-            RENDER.setCorePoolSize(t);
-        } else {
-            RENDER.setCorePoolSize(t);
-            RENDER.setMaximumPoolSize(t);
-        }
+        TileScheduler.setThreads(Math.max(1, n - 1));
     }
 
-    /** What the map is showing. Changing any part clears the tiles. Highlighted biomes are bright, the rest greyed. */
-    private record View(long seed, Dim dim, WorldType type, Set<String> highlight) {}
+    /** Wipes the cached map tiles (Settings). */
+    public static void clearCache() {
+        TileCache.clear();
+    }
 
-    private View view;
-    private double centerX, centerZ;
-    private int level = 6;
-    private final Map<String, BufferedImage> tiles = new LinkedHashMap<>(256, 0.75f, true) {
+    /** Disk space the map cache uses, in bytes. */
+    public static long cacheSize() {
+        return TileCache.size();
+    }
+
+    private volatile TileRenderer.Spec view;
+    private volatile double centerX, centerZ;
+    private volatile int level = 6;
+    /** Quick previews (one pixel per 8), shown until the sharp tile is ready. */
+    private final Map<String, BufferedImage> rough = new LinkedHashMap<>(256, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> e) {
-            return size() > 600;
+            return size() > 1500;
         }
     };
     private final Set<String> pending = ConcurrentHashMap.newKeySet();
@@ -78,7 +71,7 @@ public final class MapView extends JComponent {
     private String hoverText = "";
     private IntConsumer onSelect = i -> {};
     private java.util.function.Consumer<String> onStatus = s -> {};
-    private int generation;
+    private volatile int generation;
     private final Timer repaintSoon = new Timer(80, e -> repaint());
 
     public MapView() {
@@ -154,11 +147,11 @@ public final class MapView extends JComponent {
     }
 
     public void show(long seed, Dim dim, WorldType type, Set<String> highlight) {
-        View v = new View(seed, dim, dim == Dim.NETHER ? WorldType.NORMAL : type, Set.copyOf(highlight));
+        TileRenderer.Spec v = new TileRenderer.Spec(seed, dim, dim == Dim.OVERWORLD ? type : WorldType.NORMAL, Set.copyOf(highlight));
         if (v.equals(view)) return;
         view = v;
-        synchronized (tiles) {
-            tiles.clear();
+        synchronized (rough) {
+            rough.clear();
         }
         generation++;
         repaint();
@@ -239,11 +232,13 @@ public final class MapView extends JComponent {
     private void describe(int px, int py) {
         if (view == null) return;
         int bx = (int) Math.floor(blockX(px)), bz = (int) Math.floor(blockZ(py));
-        View v = view;
-        RENDER.submit(() -> {
-            String b = WorldGen.of(v.seed, v.dim, v.type).biomeAt(bx, bz);
+        TileRenderer.Spec v = view;
+        Thread t = new Thread(() -> {
+            String b = WorldGen.of(v.seed(), v.dim(), v.type()).biomeAt(bx, bz);
             SwingUtilities.invokeLater(() -> onStatus.accept(bx + ", " + bz + ": " + Fmt.biome(b)));
-        });
+        }, "map-biome-at");
+        t.setDaemon(true);
+        t.start();
     }
 
     private int pinAt(int px, int py) {
@@ -288,101 +283,92 @@ public final class MapView extends JComponent {
         long tileBlocks = (long) (TILE * bpp);
         long minTx = (long) Math.floor(blockX(0) / tileBlocks), maxTx = (long) Math.floor(blockX(w) / tileBlocks);
         long minTz = (long) Math.floor(blockZ(0) / tileBlocks), maxTz = (long) Math.floor(blockZ(h) / tileBlocks);
+        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         for (long tx = minTx; tx <= maxTx; tx++)
             for (long tz = minTz; tz <= maxTz; tz++) {
                 int px = (int) Math.round((tx * tileBlocks - centerX) / bpp + w / 2.0);
                 int pz = (int) Math.round((tz * tileBlocks - centerZ) / bpp + h / 2.0);
-                String key = level + "/" + tx + "/" + tz;
-                BufferedImage img;
-                synchronized (tiles) {
-                    img = tiles.get(key);
+                String key = TileCache.key(view, level, tx, tz);
+                BufferedImage img = TileCache.memory(key);
+                if (img != null) {
+                    g2.drawImage(img, px, pz, null);
+                    continue;
                 }
-                if (img != null) g2.drawImage(img, px, pz, null);
-                else request(key, tx, tz);
+                BufferedImage quick;
+                synchronized (rough) {
+                    quick = rough.get(key);
+                }
+                if (quick != null) g2.drawImage(quick, px, pz, TILE, TILE, null);
+                else drawFromParent(g2, tx, tz, px, pz);
+                request(key, tx, tz);
             }
     }
 
+    /** While a tile loads, stretch the matching quarter of the zoomed-out tile if we have it. */
+    private void drawFromParent(Graphics2D g2, long tx, long tz, int px, int pz) {
+        if (level >= MAX_LEVEL) return;
+        BufferedImage parent = TileCache.memory(TileCache.key(view, level + 1, Math.floorDiv(tx, 2), Math.floorDiv(tz, 2)));
+        if (parent == null) return;
+        int sx = (int) Math.floorMod(tx, 2) * TILE / 2, sz = (int) Math.floorMod(tz, 2) * TILE / 2;
+        g2.drawImage(parent, px, pz, px + TILE, pz + TILE, sx, sz, sx + TILE / 2, sz + TILE / 2, null);
+    }
+
+    /** Queues a tile: disk cache first, else a quick preview and then the sharp tile. */
     private void request(String key, long tx, long tz) {
         if (!pending.add(key)) return;
-        View v = view;
+        TileRenderer.Spec spec = view;
         int lvl = level, gen = generation;
-        RENDER.submit(() -> {
-            try {
-                if (gen != generation || lvl != level) return;
-                BufferedImage img = renderTile(v, lvl, tx, tz);
-                if (gen != generation) return;
-                synchronized (tiles) {
-                    tiles.put(key, img);
+        double cx = (tx + 0.5) * TILE * (double) (1 << lvl), cz = (tz + 0.5) * TILE * (double) (1 << lvl);
+        TileScheduler.submit(new TileScheduler.Job() {
+            @Override
+            public double priority() {
+                double bpp = bpp();
+                return Math.hypot(cx - centerX, cz - centerZ) / bpp;
+            }
+
+            @Override
+            public boolean wanted() {
+                boolean ok = gen == generation && lvl == level && onScreen(tx, tz, lvl);
+                if (!ok) pending.remove(key);
+                return ok;
+            }
+
+            @Override
+            public void run() {
+                try {
+                    BufferedImage img = TileCache.load(key);
+                    if (img == null) {
+                        boolean haveQuick;
+                        synchronized (rough) {
+                            haveQuick = rough.containsKey(key);
+                        }
+                        if (!haveQuick) {
+                            BufferedImage q = TileRenderer.render(spec, lvl, tx, tz, true, false);
+                            synchronized (rough) {
+                                rough.put(key, q);
+                            }
+                            SwingUtilities.invokeLater(repaintSoon::restart);
+                        }
+                        if (!wanted()) return;
+                        img = TileRenderer.render(spec, lvl, tx, tz, false, false);
+                        TileCache.save(key, img);
+                    }
+                    if (gen != generation) return;
+                    TileCache.remember(key, img);
+                    SwingUtilities.invokeLater(repaintSoon::restart);
+                } finally {
+                    pending.remove(key);
                 }
-                SwingUtilities.invokeLater(repaintSoon::restart);
-            } finally {
-                pending.remove(key);
             }
         });
     }
 
-    /**
-     * One tile: a biome sample every few pixels, filled as blocks (biomes only change every 4 blocks anyway).
-     * Zoomed far out, each pixel then takes the most common biome of its 3x3 neighbourhood, so big areas read as
-     * shapes instead of noise.
-     */
-    private static BufferedImage renderTile(View v, int lvl, long tx, long tz) {
-        WorldGen world = WorldGen.of(v.seed, v.dim, v.type);
-        double bpp = 1 << lvl;
-        // One sample per pixel when zoomed out, down to Minecraft's 4-block biome cells when zoomed in.
-        int res = (int) Math.max(1, 4 / bpp);
-        int n = TILE / res, pad = bpp >= 32 ? 1 : 0, m = n + pad * 2;
-        long ox = (long) (tx * TILE * bpp), oz = (long) (tz * TILE * bpp);
-        double cell = res * bpp;
-        String[] grid = new String[m * m];
-        for (int r = 0; r < m; r++)
-            for (int c = 0; c < m; c++) {
-                long bx = ox + (long) ((c - pad + 0.5) * cell), bz = oz + (long) ((r - pad + 0.5) * cell);
-                grid[r * m + c] = Math.abs(bx) > 30_000_000L || Math.abs(bz) > 30_000_000L ? null : world.biomeAt((int) bx, (int) bz);
-            }
-        BufferedImage img = new BufferedImage(TILE, TILE, BufferedImage.TYPE_INT_RGB);
-        for (int r = 0; r < n; r++)
-            for (int c = 0; c < n; c++) {
-                String biome = pad == 0 ? grid[r * m + c] : majority(grid, m, r + 1, c + 1);
-                if (biome == null) continue;
-                int rgb = v.highlight.isEmpty() ? shade(BiomeColors.rgb(biome)) : v.highlight.contains(biome) ? BiomeColors.rgb(biome) : grey(BiomeColors.rgb(biome));
-                for (int y = r * res; y < r * res + res; y++) for (int x = c * res; x < c * res + res; x++) img.setRGB(x, y, rgb);
-            }
-        return img;
-    }
-
-    /** The most common biome in the 3x3 cells around (r, c); the centre wins ties. */
-    private static String majority(String[] g, int m, int r, int c) {
-        String centre = g[r * m + c], best = centre;
-        int bestCount = 0;
-        for (int i = -1; i <= 1; i++)
-            for (int j = -1; j <= 1; j++) {
-                String b = g[(r + i) * m + c + j];
-                if (b == null) continue;
-                int count = 0;
-                for (int k = -1; k <= 1; k++) for (int l = -1; l <= 1; l++) if (g[(r + k) * m + c + l] == b) count++;
-                if (count > bestCount || (count == bestCount && b == centre)) {
-                    best = b;
-                    bestCount = count;
-                }
-            }
-        return best;
-    }
-
-    /** Other biomes when some are highlighted: half grey, dark. */
-    private static int grey(int rgb) {
-        int r = (rgb >> 16) & 0xFF, gr = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
-        int avg = (r + gr + b) / 3;
-        r = (r + avg) / 2 * 45 / 100;
-        gr = (gr + avg) / 2 * 45 / 100;
-        b = (b + avg) / 2 * 45 / 100;
-        return (r << 16) | (gr << 8) | b;
-    }
-
-    /** Biome colours a bit darker, so pins and outlines stand out. */
-    private static int shade(int rgb) {
-        int r = (rgb >> 16) & 0xFF, gr = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
-        return ((r * 78 / 100) << 16) | ((gr * 78 / 100) << 8) | (b * 78 / 100);
+    /** Is the tile on screen (with a one-tile margin)? Called from worker threads. */
+    private boolean onScreen(long tx, long tz, int lvl) {
+        double bpp = 1 << lvl, tileBlocks = TILE * bpp;
+        double x0 = tx * tileBlocks, z0 = tz * tileBlocks;
+        double halfW = (getWidth() / 2.0 + TILE) * bpp, halfH = (getHeight() / 2.0 + TILE) * bpp;
+        return x0 + tileBlocks >= centerX - halfW && x0 <= centerX + halfW && z0 + tileBlocks >= centerZ - halfH && z0 <= centerZ + halfH;
     }
 
     private void paintResults(Graphics2D g2, int w, int h, double bpp) {
@@ -435,7 +421,7 @@ public final class MapView extends JComponent {
         // Cursor position and scale.
         g2.setFont(Theme.FONT_SMALL);
         fm = g2.getFontMetrics();
-        String info = (view == null ? "" : view.dim.label) + (hoverText.isEmpty() ? "" : "  ·  " + hoverText);
+        String info = (view == null ? "" : view.dim().label) + (hoverText.isEmpty() ? "" : "  ·  " + hoverText);
         String scale = Fmt.big(bpp * 100) + " blocks";
         int iw = fm.stringWidth(info) + 20;
         g2.setColor(new Color(22, 24, 29, 220));

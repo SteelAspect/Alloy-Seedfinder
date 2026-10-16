@@ -21,6 +21,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The world generator for one seed, dimension and world type. Thread-safe for biome lookups. */
 public final class WorldGen {
     public static final int SEA_LEVEL = 62;
+    /** Height the map reads biomes at. */
+    public static final int MAP_Y = 64;
+    private static final java.util.Set<String> CAVE_BIOMES = java.util.Set.of("lush_caves", "dripstone_caves", "deep_dark");
 
     private static final Map<String, WorldGen> CACHE = new ConcurrentHashMap<>();
 
@@ -68,6 +71,17 @@ public final class WorldGen {
     public String biomeAt(int x, int z) {
         int y = dim == Dim.NETHER ? 64 : Math.max(SEA_LEVEL, (int) surface.compute(new DensityFunction.SinglePointContext(x, 0, z)));
         return name(biome(x, y, z));
+    }
+
+    /**
+     * The quick biome for maps: read at a fixed height (y 64), like cubiomes-viewer, which skips the expensive
+     * ground-height step. Under mountains y 64 can land in a cave biome; those spots fall back to {@link #biomeAt}.
+     * Searches always use {@link #biomeAt}.
+     */
+    public String mapBiomeAt(int x, int z) {
+        if (dim == Dim.NETHER) return biomeAt(x, z);
+        String b = name(biome(x, MAP_Y, z));
+        return CAVE_BIOMES.contains(b) ? biomeAt(x, z) : b;
     }
 
     public Holder<Biome> biome(int x, int y, int z) {
