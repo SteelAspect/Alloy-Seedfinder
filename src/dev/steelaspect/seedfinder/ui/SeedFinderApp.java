@@ -44,7 +44,7 @@ import java.util.Map;
 /** The main window: top bar with the seed, sidebar with the tools, and the current page. */
 public final class SeedFinderApp {
     public static final String NAME = "Cytra Seed Finder";
-    public static final String VERSION = "2.1.0";
+    public static final String VERSION = "2.2.0";
 
     private final Settings settings = Settings.load();
     private final JFrame frame = new JFrame(NAME);

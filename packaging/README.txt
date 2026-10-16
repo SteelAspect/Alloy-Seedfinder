@@ -1,9 +1,17 @@
 Cytra Seed Finder
 =================
 
-Finds the biggest biomes and the best structures in a Minecraft 1.21.11 seed: biggest mesas (or any biome),
-the biggest solid squares of a biome, deep witch huts, double/triple/quad ocean monuments, nether biomes and
-the biggest nether fortresses. It uses Minecraft's own world generator, so results match the real game.
+Finds the biggest biomes and the best structures in a Minecraft 1.21.11 seed, and the best spots for farms.
+It uses Minecraft's own world generator, so results match the real game.
+
+  Map                  explore the seed with structure icons, slime chunks and a chunk grid
+  Nearest structures   the closest of a kind: village types, treasure bastions, blaze spawners,
+                       end cities with a ship (and where the elytra hangs)
+  Biomes, Solid areas  biggest areas of a biome; the 10 biggest all-one-biome squares and rectangles
+  Witch huts           huts at or below a height (huts over caves generate deep)
+  Quad finder          AFK spots for 2, 3 or 4 ocean monuments or witch huts, up to the whole world
+  Slime chunks         slime farm AFK spots with the most spawnable blocks in range
+  Nether biomes, Fortresses   biggest nether biomes; biggest fortresses with a wither skeleton AFK spot
 
 Start it
   Windows:      double-click "Cytra Seed Finder.bat"
