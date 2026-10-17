@@ -118,11 +118,23 @@ public final class OpenClFfm implements OpenCl {
         name = bestName.contains(" (") ? bestName.substring(0, bestName.indexOf(" (")).trim() : bestName.trim();
     }
 
+    /**
+     * The system's OpenCL loader. Windows: only the one in System32, by full path (a bare name would also search the
+     * app's own folder and the PATH, where any OpenCL.dll could sit). Linux: by soname, which the dynamic linker
+     * looks up in the system library folders only (never the current folder). Mac: the system framework.
+     */
     private static SymbolLookup load() throws GpuException {
         String os = System.getProperty("os.name", "").toLowerCase();
-        String[] names = os.contains("win") ? new String[]{"OpenCL.dll", "OpenCL"}
-                : os.contains("mac") ? new String[]{"/System/Library/Frameworks/OpenCL.framework/OpenCL"}
-                : new String[]{"libOpenCL.so.1", "libOpenCL.so"};
+        String[] names;
+        if (os.contains("win")) {
+            String root = System.getenv("SystemRoot");
+            java.nio.file.Path dll = java.nio.file.Path.of(root == null || root.isBlank() ? "C:\\Windows" : root, "System32", "OpenCL.dll");
+            if (!java.nio.file.Files.isRegularFile(dll)) throw new GpuException("No OpenCL driver on this computer");
+            names = new String[]{dll.toString()};
+        } else {
+            names = os.contains("mac") ? new String[]{"/System/Library/Frameworks/OpenCL.framework/OpenCL"}
+                    : new String[]{"libOpenCL.so.1", "libOpenCL.so"};
+        }
         for (String n : names) {
             try {
                 return SymbolLookup.libraryLookup(n, Arena.global());
