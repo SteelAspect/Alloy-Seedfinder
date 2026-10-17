@@ -40,17 +40,17 @@ public final class SlimeSearch {
     private final Slime.Weights wt;
     private final WorldGen w;
 
-    private SlimeSearch(long seed, WorldType type, Slime.Stand stand, boolean biomes) {
+    private SlimeSearch(long seed, Slime.Stand stand, WorldGen w) {
         this.seed = seed;
         this.stand = stand;
         wt = Slime.weights(stand);
-        w = biomes ? WorldGen.of(seed, Dim.OVERWORLD, type) : null;
+        this.w = w;
     }
 
     public static List<Result> run(Params p, Progress progress) {
         Slime.check();
         Search a = p.area();
-        return new SlimeSearch(a.seed(), a.type(), p.stand(), p.biomes()).search(p, progress);
+        return new SlimeSearch(a.seed(), p.stand(), p.biomes() ? WorldGen.of(a.seed(), Dim.OVERWORLD, a.type()) : null).search(p, progress);
     }
 
     private List<Result> search(Params p, Progress progress) {
@@ -270,9 +270,9 @@ public final class SlimeSearch {
 
     // ------------------------------------------------------------------ biomes
 
-    /** Blocks lost to biomes (deep dark, mushroom fields at the floor) standing at (x, z) in this seed. */
+    /** Blocks lost to biomes (deep dark, mushroom fields at the floor) standing at (x, z) in another seed (not kept). */
     static int lostToBiomes(long seed, WorldType type, Slime.Stand stand, int x, int z) {
-        return new SlimeSearch(seed, type, stand, true).lost(x, z);
+        return new SlimeSearch(seed, stand, WorldGen.once(seed, Dim.OVERWORLD, type)).lost(x, z);
     }
 
     /** A chunk's floor blocks where slimes can spawn by biome: all, none, or the ones in the set (z * 16 + x). */

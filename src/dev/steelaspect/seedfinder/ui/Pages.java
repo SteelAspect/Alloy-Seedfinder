@@ -361,6 +361,8 @@ final class Pages {
     // ------------------------------------------------------------------ slime seeds
 
     static final class SlimeSeeds extends SearchPage {
+        /** The toolchain's high-bit climb, from the seed in the top bar. */
+        private static final String CLIMB = "Climb my seed · its 8,192 top-bit variants";
         /** label -> {families searched (%), positions searched}. */
         private static final Map<String, double[]> HOW = new LinkedHashMap<>();
 
@@ -370,6 +372,7 @@ final class Pages {
             HOW.put("Deep · top 5%, best 5 of 15 chunks", new double[]{5, 5});
             HOW.put("Records · top 5%, best 10 of 15", new double[]{5, 10});
             HOW.put("Every family · 1 chunk", new double[]{100, 1});
+            HOW.put(CLIMB, new double[]{0, 15});
         }
 
         SlimeSeeds(SeedFinderApp app) {
@@ -415,7 +418,8 @@ final class Pages {
             Search a = area(seed);
             double[] how = HOW.getOrDefault(value("how"), new double[]{5, 1});
             return dev.steelaspect.seedfinder.engine.SlimeHunt.run(new dev.steelaspect.seedfinder.engine.SlimeHunt.Params(a.centerX(), a.centerZ(),
-                    stand(this), how[0], (int) how[1], Boolean.parseBoolean(value("biomes")), 25), progress);
+                    stand(this), how[0], (int) how[1], Boolean.parseBoolean(value("biomes")), 25,
+                    value("how").equals(CLIMB) ? seed.value() : null), progress);
         }
     }
 

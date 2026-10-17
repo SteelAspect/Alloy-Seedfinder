@@ -34,8 +34,16 @@ public final class SlimeHunt {
     /** Layouts kept while searching; how far the stand point may move when refining (chunks: the best spot is often 3 away). */
     private static final int KEEP = 400, R = 5;
 
-    /** x, z: the spot (blocks). topPct: share of families searched. positions: chunks searched around the spot (1 to 15). */
-    public record Params(int x, int z, Slime.Stand stand, double topPct, int positions, boolean biomes, int top) {}
+    /**
+     * x, z: the spot (blocks). topPct: share of families searched. positions: chunks searched around the spot (1 to 15).
+     * climb: instead of hunting, the 8,192 seeds that differ from this one only in bits 35-47 (the toolchain's high-bit
+     * climb: nearly the same slime chunks, sometimes a better farm), or null.
+     */
+    public record Params(int x, int z, Slime.Stand stand, double topPct, int positions, boolean biomes, int top, Long climb) {
+        public Params(int x, int z, Slime.Stand stand, double topPct, int positions, boolean biomes, int top) {
+            this(x, z, stand, topPct, positions, biomes, top, null);
+        }
+    }
 
     private SlimeHunt() {}
 
@@ -578,12 +586,22 @@ public final class SlimeHunt {
         }
 
         // A floor to start from (40 chunks' worth): the searched families always have far better farms than that.
-        Found found = new Found(KEEP, 40 * 256);
-        Card card = Card.open();
+        Found found = new Found(KEEP, p.climb() != null ? 0 : 40 * 256);
+        Card card = p.climb() != null ? null : Card.open();
         String where = card != null ? "graphics card" : "CPU";
         try {
             for (int k = 0; k < positions.size(); k++) {
                 Position pos = positions.get(k);
+                if (p.climb() != null) {
+                    // One class of one family: all its 8,192 top values at once, on the CPU.
+                    family(pos, (int) (p.climb() & 0xFFFFF), found, -1, (int) (p.climb() >>> 20 & 0x7FFF), (int) (p.climb() >>> 20 & 0x7FFF) + 1);
+                    // The seed itself too: where a variant only ties it, the list shows your own seed.
+                    Slime.Grid own = new Slime.Grid(p.climb(), pos.cx - Slime.REACH, pos.cz - Slime.REACH, Slime.SIDE, Slime.SIDE);
+                    Slime.Weights w0 = Slime.weights(p.stand());
+                    found.offer(new Layout(p.climb() & MASK48, pos.cx, pos.cz, own.blocks(w0, pos.cx * 16, pos.cz * 16), own.chunks(w0, pos.cx * 16, pos.cz * 16)));
+                    progress.update(0.95 * (k + 1) / positions.size(), "Position " + (k + 1) + " of " + positions.size());
+                    continue;
+                }
                 int[] fams = families(pos.possible(), p.topPct());
                 double lo = 0.95 * k / positions.size(), span = 0.95 / positions.size();
                 String what = "Position " + (k + 1) + " of " + positions.size() + " (" + where + ")";
@@ -625,30 +643,52 @@ public final class SlimeHunt {
         }).toList());
         long mismatches = refined.stream().filter(o -> (int) o[2] != ((Layout) o[0]).blocks()).count();
         if (mismatches > 0) Mc.ERR.println("Slime hunt: " + mismatches + " layouts counted differently by the game's rule (kept its count)");
-        refined.sort((a, b) -> Integer.compare(((Slime.Spot) b[1]).blocks(), ((Slime.Spot) a[1]).blocks()));
-        Search at = new Search(0, WorldType.NORMAL, p.x(), p.z(), 0);
-        List<Result> out = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
+        long own = p.climb() == null ? -1 : p.climb() & MASK48;
+        refined.sort((a, b) -> ((Slime.Spot) b[1]).blocks() != ((Slime.Spot) a[1]).blocks()
+                ? Integer.compare(((Slime.Spot) b[1]).blocks(), ((Slime.Spot) a[1]).blocks())
+                : ((Layout) b[0]).seed() == own || ((Layout) a[0]).seed() == own
+                ? Boolean.compare(((Layout) b[0]).seed() == own, ((Layout) a[0]).seed() == own)
+                : Long.compare(((Layout) a[0]).seed(), ((Layout) b[0]).seed()));
+        // Different seeds can give exactly the same slime chunks around the spot: the same farm, shown once. Their
+        // worlds differ though, so with biomes on, the one losing the fewest blocks to biomes is kept.
+        java.util.LinkedHashMap<String, List<Object[]>> farms = new java.util.LinkedHashMap<>();
         for (Object[] o : refined) {
-            if (out.size() >= p.top()) break;
-            Layout l = (Layout) o[0];
             Slime.Spot s = (Slime.Spot) o[1];
-            // Different seeds can give exactly the same slime chunks around the spot: the same farm, shown once.
-            if (!seen.add(s.x() + "," + s.z() + ":" + layoutKey(l.seed(), s.x(), s.z(), wt))) continue;
-            int lost = -1;
-            if (p.biomes()) lost = SlimeSearch.lostToBiomes(l.seed(), WorldType.NORMAL, p.stand(), s.x(), s.z());
-            Result r = SlimeSearch.result(l.seed(), s, p.stand(), lost, at);
-            r.seed = l.seed();
-            java.util.LinkedHashMap<String, String> d = new java.util.LinkedHashMap<>();
-            d.put("Seed", Long.toString(l.seed()));
-            d.putAll(r.details);
-            d.remove("Pick");
-            // Bits 48-63 of a seed don't change slime chunks: the same farm is in 65,536 seeds (add any multiple of 2^48).
-            d.put("Same farm", "65,536 seeds");
-            r.details = d;
-            out.add(r);
+            String key = s.x() + "," + s.z() + ":" + layoutKey(((Layout) o[0]).seed(), s.x(), s.z(), wt);
+            List<Object[]> same = farms.get(key);
+            if (same == null && farms.size() >= 2 * p.top()) continue;
+            if (same == null) farms.put(key, same = new ArrayList<>());
+            if (same.size() < 4) same.add(o);
         }
-        out.sort((a, b) -> Double.compare(b.value, a.value));
+        Search at = new Search(0, WorldType.NORMAL, p.x(), p.z(), 0);
+        progress.update(0.97, p.biomes() ? "Checking biomes in each seed" : "Finishing");
+        List<Result> out = new ArrayList<>(new ArrayList<>(farms.values()).parallelStream().map(same -> {
+            progress.check();
+            Result best = null;
+            for (Object[] o : same) {
+                Layout l = (Layout) o[0];
+                Slime.Spot s = (Slime.Spot) o[1];
+                // A climb keeps the seed's bits 48-63 (they don't change slime chunks).
+                long seed = p.climb() != null ? p.climb() & ~MASK48 | l.seed() : l.seed();
+                int lost = p.biomes() ? SlimeSearch.lostToBiomes(seed, WorldType.NORMAL, p.stand(), s.x(), s.z()) : -1;
+                if (best != null && s.blocks() - Math.max(0, lost) <= best.value) continue;
+                Result r = SlimeSearch.result(seed, s, p.stand(), lost, at);
+                r.seed = seed;
+                java.util.LinkedHashMap<String, String> d = new java.util.LinkedHashMap<>();
+                d.put("Seed", Long.toString(seed));
+                if (p.climb() != null) d.put("Climb", seed == p.climb() ? "your seed" : "bits 35-47 changed");
+                d.putAll(r.details);
+                d.remove("Pick");
+                // Bits 48-63 of a seed don't change slime chunks: the same farm is in 65,536 seeds (add any multiple of 2^48).
+                d.put("Same farm", "65,536 seeds");
+                r.details = d;
+                best = r;
+                if (!p.biomes()) break;
+            }
+            return best;
+        }).toList());
+        out.sort((a, b) -> a.value != b.value ? Double.compare(b.value, a.value) : Long.compare(a.seed, b.seed));
+        if (out.size() > p.top()) out = new ArrayList<>(out.subList(0, p.top()));
         String cpu = card == null && Card.problem() != null ? " (on the CPU: " + Card.problem() + ")" : "";
         progress.update(1, out.isEmpty() ? "Nothing found" + cpu : p.stand() == Slime.Stand.LEVEL ? "Best: " + out.get(0).details.get("cq") + " cq" + cpu
                 : "Best: " + out.get(0).size + " spawning spaces at y -39" + cpu);

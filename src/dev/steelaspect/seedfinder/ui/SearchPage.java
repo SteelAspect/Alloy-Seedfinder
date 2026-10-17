@@ -635,6 +635,13 @@ public abstract class SearchPage extends JPanel {
                     setStatus("Couldn't save: " + ex.getMessage(), Theme.DANGER);
                 }
             }));
+            if (addSeed && r.seed != null) menu.add(item("Copy 10 more seeds with exactly this farm", () -> {
+                // Bits 48-63 of a seed don't change slime chunks: adding any multiple of 2^48 gives the same farm.
+                StringBuilder b = new StringBuilder();
+                for (int k = 1; k <= 10; k++) b.append(r.seed + ((long) k << 48)).append('\n');
+                app.copy(b.toString());
+                setStatus("Copied 10 seeds with the same slime chunks everywhere (65,536 in all: add any multiple of 2^48)", Theme.SUCCESS);
+            }));
             if (addSeed && r.seed != null) menu.add(item("Add seed " + r.seed + " to my seeds", () -> {
                 app.addSeed("Slime " + Math.round(r.value / 2.56) / 100.0 + " cq", r.seed);
                 setStatus("Added seed " + r.seed + " and switched to it", Theme.SUCCESS);

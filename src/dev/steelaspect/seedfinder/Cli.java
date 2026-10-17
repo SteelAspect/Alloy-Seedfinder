@@ -48,6 +48,7 @@ final class Cli {
               seedfinder quadhuts <seed> [--min 2] [--min-dist 0]                      double/triple/quad witch hut AFK spots
               seedfinder slime <seed> [--stand level|y39] [--no-biomes]               best slime farm AFK spots (cq, like kyoubitt's slime tools)
               seedfinder slimeseeds [--center 0,776] [--families 5] [--positions 1]    seeds with the best slime farm at a spot
+                         [--climb <seed> --positions 15]                               or the best of a seed's 8,192 top-bit variants
               seedfinder slimerig <seed> --center x,z [--stand level|y39]              in-game test rig commands for a farm (Carpet + WorldEdit)
               seedfinder slimepicture <seed> --center x,z --out farm.png               picture of a farm's 17x17 chunks
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
@@ -141,7 +142,7 @@ final class Cli {
             case "slime" -> SlimeSearch.run(new SlimeSearch.Params(area, stand, !opt.containsKey("--no-biomes"), top), p);
             case "slimeseeds" -> SlimeHunt.run(new SlimeHunt.Params(area.centerX(), area.centerZ(), stand,
                     Double.parseDouble(opt.getOrDefault("--families", "5")), Integer.parseInt(opt.getOrDefault("--positions", "1")),
-                    !opt.containsKey("--no-biomes"), top), p);
+                    !opt.containsKey("--no-biomes"), top, opt.containsKey("--climb") ? Long.valueOf(opt.get("--climb")) : null), p);
             case "nearest" -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type,
                     NearestSearch.Target.valueOf(opt.getOrDefault("--type", "VILLAGE").toUpperCase(Locale.ROOT)), area.centerX(), area.centerZ(),
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);

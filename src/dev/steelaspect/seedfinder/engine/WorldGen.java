@@ -47,6 +47,13 @@ public final class WorldGen {
         return CACHE.computeIfAbsent(seed + "/" + dim + "/" + t, k -> new WorldGen(seed, dim, t));
     }
 
+    /** The same, but not kept afterwards (for a quick look at many seeds, like the slime seed hunt's biome check). */
+    public static WorldGen once(long seed, Dim dim, WorldType type) {
+        WorldType t = dim == Dim.OVERWORLD ? type : WorldType.NORMAL;
+        WorldGen w = CACHE.get(seed + "/" + dim + "/" + t);
+        return w != null ? w : new WorldGen(seed, dim, t);
+    }
+
     private WorldGen(long seed, Dim dim, WorldType type) {
         this.seed = seed;
         this.dim = dim;
