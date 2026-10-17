@@ -42,6 +42,9 @@ public interface OpenCl extends AutoCloseable {
         /** Runs the kernel on this many work items and waits for it. */
         void run(long items) throws GpuException;
 
+        /** Same, in work groups of this size (items must be a multiple of it). */
+        void run(long items, int group) throws GpuException;
+
         @Override
         void close();
     }

@@ -405,11 +405,21 @@ public final class OpenClFfm implements OpenCl {
 
         @Override
         public void run(long items) throws GpuException {
+            run(items, 0);
+        }
+
+        @Override
+        public void run(long items, int group) throws GpuException {
             synchronized (OpenClFfm.this) {
                 try (Arena a = Arena.ofConfined()) {
                     MemorySegment global = a.allocate(8, 8);
                     global.set(LONG, 0, items);
-                    check((int) ndRange.invokeExact(queue, kernel, 1, MemorySegment.NULL, global, MemorySegment.NULL, 0, MemorySegment.NULL, MemorySegment.NULL),
+                    MemorySegment local = MemorySegment.NULL;
+                    if (group > 0) {
+                        local = a.allocate(8, 8);
+                        local.set(LONG, 0, group);
+                    }
+                    check((int) ndRange.invokeExact(queue, kernel, 1, MemorySegment.NULL, global, local, 0, MemorySegment.NULL, MemorySegment.NULL),
                             "clEnqueueNDRangeKernel");
                     check((int) finish.invokeExact(queue), "clFinish");
                 } catch (GpuException e) {

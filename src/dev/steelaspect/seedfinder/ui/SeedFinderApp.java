@@ -82,7 +82,7 @@ public final class SeedFinderApp {
 
         mapPage = new MapPage(this);
         add("map", mapPage);
-        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this), new Pages.Nearest(this),
+        for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this), new Pages.SlimeSeeds(this), new Pages.Nearest(this),
                 new Pages.Nether(this), new Pages.Fortresses(this))) {
             p.build();
             searchPages.add(p);
@@ -103,6 +103,7 @@ public final class SeedFinderApp {
         sidebar.item("huts", "Witch huts", "hut");
         sidebar.item("monuments", "Quad finder", "waves");
         sidebar.item("slime", "Slime chunks", "slime");
+        sidebar.item("slimeseeds", "Slime seeds", "slime");
         sidebar.section("Nether");
         sidebar.item("nether", "Nether biomes", "flame");
         sidebar.item("fortresses", "Fortresses", "castle");
@@ -194,6 +195,20 @@ public final class SeedFinderApp {
             }
         show(e.page);
         p.open(e);
+    }
+
+    /** Adds a seed to the list and switches to it. */
+    void addSeed(String name, long value) {
+        for (int i = 0; i < settings.seeds.size(); i++)
+            if (settings.seeds.get(i).value() == value) {
+                settings.selected = i;
+                seedsChanged();
+                return;
+            }
+        settings.seeds.add(new Settings.Seed(name, Long.toString(value), WorldType.NORMAL));
+        settings.selected = settings.seeds.size() - 1;
+        seedsChanged();
+        warmUp();
     }
 
     void seedsChanged() {

@@ -174,10 +174,13 @@ public abstract class SearchPage extends JPanel {
         add(split, BorderLayout.CENTER);
 
         table.onSelect(i -> {
+            List<Result> rs = table.results();
+            Result r = i >= 0 && i < rs.size() ? rs.get(i) : null;
+            // A result in another seed (slime seed hunt): the map shows that seed.
+            if (r != null && r.seed != null) map.show(r.seed, dim(), app.seed().type, highlight());
             map.select(i);
             // Slime farms: zoom in far enough to see the chunks around the AFK spot.
-            List<Result> rs = table.results();
-            if (slimeChunks() && i >= 0 && i < rs.size()) map.centerOn(rs.get(i).x, rs.get(i).z, 160);
+            if (slimeChunks() && r != null) map.centerOn(r.x, r.z, 160);
         });
         map.onSelect(table::selectRow);
         map.onStatus(s -> setStatus(s, Theme.TEXT2));
@@ -210,6 +213,11 @@ public abstract class SearchPage extends JPanel {
 
     /** Runs the search for this seed. */
     protected abstract List<Result> run(Settings.Seed seed, Progress progress) throws Exception;
+
+    /** More buttons under the results, for this tool's results. */
+    protected List<JComponent> extraActions() {
+        return List.of();
+    }
 
     protected String emptyText() {
         return "Pick your settings and press Search";
@@ -427,6 +435,8 @@ public abstract class SearchPage extends JPanel {
 
     private void showResults(List<Result> results) {
         table.setResults(results);
+        // Results in other seeds (slime seed hunt): the map starts on the first one's seed.
+        if (!results.isEmpty() && results.get(0).seed != null) map.show(results.get(0).seed, dim(), app.seed().type, highlight());
         map.setResults(results);
         setEmpty(results.isEmpty() ? (busy ? "Searching…" : emptyText()) : "");
         setActionsEnabled(!results.isEmpty());
@@ -528,14 +538,16 @@ public abstract class SearchPage extends JPanel {
         Ui.FlatButton verify = Ui.button("Verify", "shield", Ui.Kind.SECONDARY);
         verify.setToolTipText("Check results on a real Minecraft server with this seed (about 1-2 min)");
         verify.addActionListener(e -> verify());
-        resultActions.addAll(List.of(copy, waypoints, save, verify));
+        resultActions.addAll(List.of(copy, waypoints, save));
+        resultActions.addAll(extraActions());
+        resultActions.add(verify);
         JPanel p = Ui.clear(new FlowLayout(FlowLayout.LEFT, 8, 0));
         Theme.pad(p, 0, 6, 0, 6);
         for (JComponent c : resultActions) p.add(c);
         return p;
     }
 
-    private static JMenuItem item(String text, Runnable action) {
+    protected static JMenuItem item(String text, Runnable action) {
         JMenuItem i = new JMenuItem(text);
         i.setFont(Theme.FONT);
         i.setForeground(Theme.TEXT);
@@ -548,7 +560,7 @@ public abstract class SearchPage extends JPanel {
         for (JComponent c : resultActions) c.setEnabled(on && !busy);
     }
 
-    private Result chosen() {
+    protected Result chosen() {
         Result r = table.selected();
         return r != null ? r : table.results().isEmpty() ? null : table.results().get(0);
     }
@@ -589,6 +601,47 @@ public abstract class SearchPage extends JPanel {
         } catch (Exception ex) {
             setStatus("Couldn't save: " + ex.getMessage(), Theme.DANGER);
         }
+    }
+
+    // ------------------------------------------------------------------ slime farms
+
+    /** The seed a result is in: its own (seed hunt), or the seed it was searched in. */
+    protected long seedOf(Result r) {
+        return r.seed != null ? r.seed : current != null ? current.seed : app.seed().value();
+    }
+
+    /** Slime farm results: the in-game test rig, the farm picture, and (seed hunt) adding the farm's seed. */
+    protected Ui.FlatButton farmButton(boolean addSeed) {
+        Ui.FlatButton farm = Ui.button("Farm", "slime", Ui.Kind.SECONDARY);
+        farm.setToolTipText("Test rig commands and a picture of the selected farm");
+        farm.addActionListener(e -> {
+            Result r = chosen();
+            if (r == null) return;
+            long seed = seedOf(r);
+            dev.steelaspect.seedfinder.engine.Slime.Stand stand = r.ref != null && r.ref.length > 3
+                    ? dev.steelaspect.seedfinder.engine.Slime.Stand.values()[r.ref[3]] : dev.steelaspect.seedfinder.engine.Slime.Stand.LEVEL;
+            JPopupMenu menu = new JPopupMenu();
+            menu.add(item("Copy test rig commands (Carpet + WorldEdit)", () -> {
+                app.copy(dev.steelaspect.seedfinder.engine.Slime.rig(seed, r.x, r.z, stand));
+                setStatus("Copied the test rig for farm at " + r.x + ", " + r.z + ". Paste it into a text file: each line is one command.", Theme.SUCCESS);
+            }));
+            menu.add(item("Save farm picture…", () -> {
+                File f = app.chooseSaveFile("slime-farm-" + seed + "_" + r.x + "_" + r.z + ".png");
+                if (f == null) return;
+                try {
+                    ImageIO.write(dev.steelaspect.seedfinder.engine.Slime.picture(seed, r.x, r.z, stand), "png", f);
+                    setStatus("Saved " + f.getName(), Theme.SUCCESS);
+                } catch (Exception ex) {
+                    setStatus("Couldn't save: " + ex.getMessage(), Theme.DANGER);
+                }
+            }));
+            if (addSeed && r.seed != null) menu.add(item("Add seed " + r.seed + " to my seeds", () -> {
+                app.addSeed("Slime " + Math.round(r.value / 2.56) / 100.0 + " cq", r.seed);
+                setStatus("Added seed " + r.seed + " and switched to it", Theme.SUCCESS);
+            }));
+            menu.show(farm, 0, -menu.getPreferredSize().height - 4);
+        });
+        return farm;
     }
 
     private void verify() {

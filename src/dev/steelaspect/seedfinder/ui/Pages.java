@@ -314,14 +314,27 @@ final class Pages {
 
     // ------------------------------------------------------------------ slime chunks
 
+    static final String[] STANDS = java.util.Arrays.stream(dev.steelaspect.seedfinder.engine.Slime.Stand.values())
+            .map(x -> x.label).toArray(String[]::new);
+
+    static dev.steelaspect.seedfinder.engine.Slime.Stand stand(SearchPage p) {
+        for (dev.steelaspect.seedfinder.engine.Slime.Stand x : dev.steelaspect.seedfinder.engine.Slime.Stand.values())
+            if (x.label.equals(p.value("stand"))) return x;
+        return dev.steelaspect.seedfinder.engine.Slime.Stand.LEVEL;
+    }
+
     static final class Slime extends SearchPage {
         Slime(SeedFinderApp app) {
-            super(app, "slime", "Slime chunks", "Slime farm AFK spots with the most blocks slimes can spawn in (slime chunks below y 40, biomes checked)");
+            super(app, "slime", "Slime chunks", "Best slime farm AFK spots, scored like kyoubitt's slime tools: one floor of slime chunks at y -64. "
+                    + "Pick the nearest one within 1 cq of the best.");
         }
 
         @Override
         protected void buildForm(JPanel form) {
-            areaFields(form, "40k × 40k");
+            areaFields(form, "100k × 100k");
+            combo(form, "stand", "Stand", STANDS, 200).setToolTipText("<html><b>Level with the floor</b>: the cq the slime tools and their records use.<br>"
+                    + "<b>Feet at y -39</b>: what Carpet's /perimeterinfo reads in game over a y -64 floor.</html>");
+            check(form, "biomes", "Biomes", true).setToolTipText("Deep dark and mushroom fields have no slimes. Turn off for a superflat test world.");
         }
 
         @Override
@@ -335,8 +348,74 @@ final class Pages {
         }
 
         @Override
+        protected List<javax.swing.JComponent> extraActions() {
+            return List.of(farmButton(false));
+        }
+
+        @Override
         protected List<Result> run(Settings.Seed seed, Progress progress) {
-            return SlimeSearch.run(new SlimeSearch.Params(area(seed), 20), progress);
+            return SlimeSearch.run(new SlimeSearch.Params(area(seed), stand(this), Boolean.parseBoolean(value("biomes")), 20), progress);
+        }
+    }
+
+    // ------------------------------------------------------------------ slime seeds
+
+    static final class SlimeSeeds extends SearchPage {
+        /** label -> {families searched (%), positions searched}. */
+        private static final Map<String, double[]> HOW = new LinkedHashMap<>();
+
+        static {
+            HOW.put("Quick · top 1% of families", new double[]{1, 1});
+            HOW.put("Normal · top 5%", new double[]{5, 1});
+            HOW.put("Deep · top 5%, best 5 of 15 chunks", new double[]{5, 5});
+            HOW.put("Records · top 5%, best 10 of 15", new double[]{5, 10});
+            HOW.put("Every family · 1 chunk", new double[]{100, 1});
+        }
+
+        SlimeSeeds(SeedFinderApp app) {
+            super(app, "slimeseeds", "Slime seeds", "Seeds with the best slime farm at a spot, by kyoubitt's exact phase search: every seed of the "
+                    + "richest families, all at once. Z of 1552k + 768 or 784 holds the best spots.");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            text(form, "center", "Spot x, z", "0, 776", 150);
+            combo(form, "how", "How much", HOW.keySet().toArray(String[]::new), 250).setSelectedIndex(1);
+            combo(form, "stand", "Stand", STANDS, 200);
+            check(form, "biomes", "Biomes", true).setToolTipText("Deep dark and mushroom fields have no slimes. Turn off for a superflat test world.");
+        }
+
+        @Override
+        protected Search area(Settings.Seed seed) {
+            return areaFrom(seed, 400);
+        }
+
+        @Override
+        protected boolean slimeChunks() {
+            return true;
+        }
+
+        @Override
+        protected Dim dim() {
+            return Dim.OVERWORLD;
+        }
+
+        @Override
+        protected List<javax.swing.JComponent> extraActions() {
+            return List.of(farmButton(true));
+        }
+
+        @Override
+        protected String emptyText() {
+            return "Pick a spot and press Search. Each result is a different seed: select one to see its slime chunks.";
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) throws Exception {
+            Search a = area(seed);
+            double[] how = HOW.getOrDefault(value("how"), new double[]{5, 1});
+            return dev.steelaspect.seedfinder.engine.SlimeHunt.run(new dev.steelaspect.seedfinder.engine.SlimeHunt.Params(a.centerX(), a.centerZ(),
+                    stand(this), how[0], (int) how[1], Boolean.parseBoolean(value("biomes")), 25), progress);
         }
     }
 

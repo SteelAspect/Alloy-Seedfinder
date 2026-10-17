@@ -11,7 +11,7 @@ end cities). Positions use the game's own placement code and biome checks (check
 
 Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares and rectangles of a biome · witch
 huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument and witch hut AFK
-spots (Quad finder), up to the whole world · slime farm AFK spots · nearest structures of a kind (village types,
+spots (Quad finder), up to the whole world · slime farm AFK spots and seeds with the best slime farm · nearest structures of a kind (village types,
 treasure bastions, blaze spawners, end cities with a ship and where its elytra hangs) · wither skeleton farm AFK
 spot for each fortress · nether biomes · biggest nether fortresses (floor area, height, volume).
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
@@ -58,12 +58,25 @@ is worked out like the game does (average ground under it), on the chunk's terra
 (`CarvedGround`: the game's own noise fill and carver loop for that chunk). Whole world triple/quad huts: about
 2.5 minutes. Block and fluid tags are read from the game jar too (carvers need them).
 
-Slime farms: spots are ranked by the exact number of blocks a slime can spawn in within range (slime chunk from
-WorldgenRandom.seedSlimeChunk, y -64 to 39, 24 to 128 blocks away, and a biome whose monster list has slimes, looked
-up per block with the game's BiomeManager, so deep dark and mushroom fields don't count). Every chunk is scored by
-slime chunks within 8 chunks, the best 300 are climbed to the best block and height, the best 60 recounted with
-biomes. Counts match a plain loop over every block (12/12 spots); the #1 spot matches trying every 4th block over
-20k x 20k on two seeds. 400k x 400k: 13 s, 2M x 2M: 87 s (Balanced).
+Slime farms (Slime chunks and Slime seeds), ported from kyoubitt's slime toolchain (github.com/kyoubitt/slime,
+used with permission). A farm is one floor of slime-chunk blocks at y -64; a block counts when its slime would stand
+more than 24 and at most 128 blocks from your feet. cq = counted blocks / 256, standing level with the floor (the
+toolchain's records); "At y -39" is what Carpet's /perimeterinfo reads with your feet at y -39. Checked against the
+toolchain's numbers: SlimeFinder.jar's rows (16821/70, 16498/72, 16496/68), the 66.04 and 66.21 records, and the
+in-game /perimeterinfo counts of 7 record farms (18,727 · 18,598 · 18,261 · 18,407 · 17,771 · 17,112 · 18,313), all exact.
+Spot search: every chunk corner is scored (a 17x17 square count and row counts rule most out), the best 300 are
+tried at every block within 2 chunks, the best get the biome check at the floor (deep dark and mushroom fields have no
+slimes). 100k x 100k: 4 s, 1M x 1M: 8 s. The pick is the nearest result within 1 cq of the best.
+Seed hunt: the toolchain's exact phase search. Only the low 48 bits of a seed matter; for one family (bits 0-19)
+and class (20-34) the 8,192 top values move every chunk's random number in lockstep, so the best farm of a class
+comes from one walk over its chunks' wrap points. The richest families (by chunks that can be slime at all) are
+searched, every class bounded per phase and quarter, the walk run where the bound reaches the best so far; every
+layout is recounted with the game's rule. OpenCL on the graphics card (234M classes/s on an RX 9070 XT, same results
+as the CPU, checked before each hunt), the CPU otherwise. The walk matches all 8,192 seeds of 80 random classes by
+brute force; at the toolchain's spots it re-finds the 69.39 record (seed 71791501344359, 17,764 blocks, 11 s for 10
+positions) and, ranked in game, the 72.22 (seed 245821300723973, 18,727 at y -39). Farms also export as the
+toolchain's picture and as an in-game test rig (WorldEdit void, obsidian floor from one command block of command
+minecarts, a /perimeterinfo block), tested on a 1.21.11 server: the floor is obsidian in exactly the slime chunks.
 
 Nearest structures: rings of regions outwards from the point, with the map icons' placement code; bastion type and
 end city ships come from the game building the pieces (the ship's "Elytra" data marker gives the item frame spot).

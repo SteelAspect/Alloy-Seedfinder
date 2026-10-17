@@ -3,7 +3,7 @@ package dev.steelaspect.seedfinder.ui;
 import dev.steelaspect.seedfinder.engine.Dim;
 import dev.steelaspect.seedfinder.engine.Fmt;
 import dev.steelaspect.seedfinder.engine.Result;
-import dev.steelaspect.seedfinder.engine.SlimeSearch;
+import dev.steelaspect.seedfinder.engine.Slime;
 import dev.steelaspect.seedfinder.engine.StructureLayers;
 import dev.steelaspect.seedfinder.engine.WorldGen;
 import dev.steelaspect.seedfinder.engine.WorldType;
@@ -549,7 +549,7 @@ public final class MapView extends JComponent {
             for (int cz = cz0; cz <= cz1; cz++) {
                 double x = (cx * 16.0 - centerX) / bpp + w / 2.0, z = (cz * 16.0 - centerZ) / bpp + h / 2.0;
                 java.awt.geom.Rectangle2D.Double r = new java.awt.geom.Rectangle2D.Double(x, z, size, size);
-                if (slime && SlimeSearch.isSlimeChunk(v.seed(), cx, cz)) {
+                if (slime && Slime.isSlimeChunk(v.seed(), cx, cz)) {
                     g2.setColor(fill);
                     g2.fill(r);
                     if (size >= 6) {
@@ -625,7 +625,9 @@ public final class MapView extends JComponent {
             if (bw >= 4 && bh >= 4) {
                 g2.setColor(i == selected ? Theme.ACCENT : new Color(255, 255, 255, 150));
                 g2.setStroke(new BasicStroke(i == selected ? 2f : 1.2f));
-                g2.draw(new RoundRectangle2D.Double(x0, z0, bw, bh, 4, 4));
+                // Slime farms count blocks in a circle around the AFK spot.
+                if (r.kind == Result.Kind.SLIME) g2.draw(new Ellipse2D.Double(x0, z0, bw, bh));
+                else g2.draw(new RoundRectangle2D.Double(x0, z0, bw, bh, 4, 4));
             }
         }
         g2.setFont(Theme.FONT_SMALL.deriveFont(java.awt.Font.BOLD));

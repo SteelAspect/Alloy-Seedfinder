@@ -7,6 +7,8 @@ import dev.steelaspect.seedfinder.engine.HutSearch;
 import dev.steelaspect.seedfinder.engine.Mc;
 import dev.steelaspect.seedfinder.engine.MonumentSearch;
 import dev.steelaspect.seedfinder.engine.NearestSearch;
+import dev.steelaspect.seedfinder.engine.Slime;
+import dev.steelaspect.seedfinder.engine.SlimeHunt;
 import dev.steelaspect.seedfinder.engine.SlimeSearch;
 import dev.steelaspect.seedfinder.engine.Progress;
 import dev.steelaspect.seedfinder.engine.Result;
@@ -44,7 +46,10 @@ final class Cli {
               seedfinder huts <seed> [--max-y -50]                                     witch huts at or below a height
               seedfinder monuments <seed> [--min 3] [--min-dist 0]                     double/triple/quad monument AFK spots
               seedfinder quadhuts <seed> [--min 2] [--min-dist 0]                      double/triple/quad witch hut AFK spots
-              seedfinder slime <seed>                                                  best slime farm AFK spots
+              seedfinder slime <seed> [--stand level|y39] [--no-biomes]               best slime farm AFK spots (cq, like kyoubitt's slime tools)
+              seedfinder slimeseeds [--center 0,776] [--families 5] [--positions 1]    seeds with the best slime farm at a spot
+              seedfinder slimerig <seed> --center x,z [--stand level|y39]              in-game test rig commands for a farm (Carpet + WorldEdit)
+              seedfinder slimepicture <seed> --center x,z --out farm.png               picture of a farm's 17x17 chunks
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
               seedfinder fortresses <seed> [--min-dist 0]                              biggest nether fortresses
 
@@ -68,6 +73,13 @@ final class Cli {
         String mode = args[0];
         if (args[0].matches("-?\\d+")) mode = "biomes"; // old style: just a seed
         else args = Arrays.copyOfRange(args, 1, args.length);
+        // The slime seed hunt has no seed to start from.
+        if (mode.equals("slimeseeds") && (args.length == 0 || args[0].startsWith("--"))) {
+            String[] with = new String[args.length + 1];
+            with[0] = "0";
+            System.arraycopy(args, 0, with, 1, args.length);
+            args = with;
+        }
         if (args.length == 0) {
             OUT.printf(HELP, SeedFinderApp.VERSION);
             return 2;
@@ -79,7 +91,7 @@ final class Cli {
             String a = args[i];
             if (a.equals("--large-biomes")) seed.type = WorldType.LARGE_BIOMES;
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
-            else if (a.equals("--nether") || a.equals("--joined") || a.equals("--accept-eula")) opt.put(a, "true");
+            else if (a.equals("--nether") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
             else if (a.equals("--cpu")) cpuOnly = true;
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
@@ -90,7 +102,7 @@ final class Cli {
                 return 2;
             }
         }
-        String[] c = opt.getOrDefault("--center", "0,0").split(",");
+        String[] c = opt.getOrDefault("--center", mode.equals("slimeseeds") ? "0,776" : "0,0").split(",");
         Search area = new Search(seed.value(), seed.type, Integer.parseInt(c[0].trim()), Integer.parseInt(c[1].trim()),
                 Integer.parseInt(opt.getOrDefault("--radius", "50000")));
         int top = Integer.parseInt(opt.getOrDefault("--top", "25"));
@@ -98,6 +110,17 @@ final class Cli {
         List<String> biomes = opt.containsKey("--biomes") ? List.of(opt.get("--biomes").split(",")) : null;
         // The graphics card, like in the app: not with --cpu or at Light speed.
         dev.steelaspect.seedfinder.engine.GpuWorld.setEnabled(!cpuOnly && Workers.speed() != Workers.Speed.LIGHT);
+        Slime.Stand stand = opt.getOrDefault("--stand", "level").toLowerCase(Locale.ROOT).contains("39") ? Slime.Stand.Y39 : Slime.Stand.LEVEL;
+        if (mode.equals("slimerig")) {
+            OUT.println(Slime.rig(seed.value(), area.centerX(), area.centerZ(), stand));
+            return 0;
+        }
+        if (mode.equals("slimepicture")) {
+            String out = opt.getOrDefault("--out", "slime-farm.png");
+            ImageIO.write(Slime.picture(seed.value(), area.centerX(), area.centerZ(), stand), "png", new File(out));
+            OUT.println("Saved " + out);
+            return 0;
+        }
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
         Progress p = progress();
         long start = System.nanoTime();
@@ -115,7 +138,10 @@ final class Cli {
             case "monuments", "quadhuts" -> MonumentSearch.run(new MonumentSearch.Params(area,
                     m.equals("quadhuts") ? MonumentSearch.Kind.HUT : MonumentSearch.Kind.MONUMENT,
                     Integer.parseInt(opt.getOrDefault("--min", m.equals("quadhuts") ? "2" : "3")), Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
-            case "slime" -> SlimeSearch.run(new SlimeSearch.Params(area, top), p);
+            case "slime" -> SlimeSearch.run(new SlimeSearch.Params(area, stand, !opt.containsKey("--no-biomes"), top), p);
+            case "slimeseeds" -> SlimeHunt.run(new SlimeHunt.Params(area.centerX(), area.centerZ(), stand,
+                    Double.parseDouble(opt.getOrDefault("--families", "5")), Integer.parseInt(opt.getOrDefault("--positions", "1")),
+                    !opt.containsKey("--no-biomes"), top), p);
             case "nearest" -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type,
                     NearestSearch.Target.valueOf(opt.getOrDefault("--type", "VILLAGE").toUpperCase(Locale.ROOT)), area.centerX(), area.centerZ(),
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);

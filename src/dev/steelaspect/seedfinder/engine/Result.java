@@ -31,6 +31,8 @@ public final class Result {
     public String structure;
     /** Biomes allowed at the ref points (biome results). */
     public String[] biomes;
+    /** The world seed this result is in, when it isn't the searched seed (slime seed hunt). */
+    public Long seed;
     /** Set after "Verify": "ok", "fail" or a message. */
     public String verified;
 
