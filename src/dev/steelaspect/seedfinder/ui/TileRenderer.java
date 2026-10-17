@@ -40,13 +40,20 @@ public final class TileRenderer {
         int n = TILE / res, pad = !rough && bpp >= 32 ? 1 : 0, m = n + pad * 2;
         long ox = (long) (tx * TILE * bpp), oz = (long) (tz * TILE * bpp);
         double cell = res * bpp;
-        String[] grid = new String[m * m];
-        for (int r = 0; r < m; r++)
-            for (int c = 0; c < m; c++) {
-                long bx = ox + (long) ((c - pad + 0.5) * cell), bz = oz + (long) ((r - pad + 0.5) * cell);
-                if (Math.abs(bx) > 30_000_000L || Math.abs(bz) > 30_000_000L) continue;
-                grid[r * m + c] = exact ? world.biomeAt((int) bx, (int) bz) : world.mapBiomeAt((int) bx, (int) bz);
-            }
+        String[] grid = null;
+        // Samples sit in the middle of each cell; cell is always even, so they're a plain grid of whole blocks.
+        long gx = ox + (long) ((-pad + 0.5) * cell), gz = oz + (long) ((-pad + 0.5) * cell);
+        if (cell == (long) cell && Math.abs(gx) + (long) (m * cell) < 30_000_000L && Math.abs(gz) + (long) (m * cell) < 30_000_000L)
+            grid = world.gpuGrid(!exact, (int) gx, (int) gz, (int) cell, m, m);
+        if (grid == null) {
+            grid = new String[m * m];
+            for (int r = 0; r < m; r++)
+                for (int c = 0; c < m; c++) {
+                    long bx = ox + (long) ((c - pad + 0.5) * cell), bz = oz + (long) ((r - pad + 0.5) * cell);
+                    if (Math.abs(bx) > 30_000_000L || Math.abs(bz) > 30_000_000L) continue;
+                    grid[r * m + c] = exact ? world.biomeAt((int) bx, (int) bz) : world.mapBiomeAt((int) bx, (int) bz);
+                }
+        }
         // Rough tiles stay small (one pixel per sample); full tiles are 256 px.
         int scale = rough ? 1 : res;
         BufferedImage img = new BufferedImage(n * scale, n * scale, BufferedImage.TYPE_INT_RGB);

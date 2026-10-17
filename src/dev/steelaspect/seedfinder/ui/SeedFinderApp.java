@@ -124,7 +124,13 @@ public final class SeedFinderApp {
         settings.save();
         Workers.set(s);
         MapView.setThreads(s.threads());
+        applyGpu();
         if (speedBox != null && speedBox.getSelectedItem() != s) speedBox.setSelectedItem(s);
+    }
+
+    /** The graphics card is used when switched on in Settings, except at Light speed (it keeps the card free for games). */
+    void applyGpu() {
+        dev.steelaspect.seedfinder.engine.GpuWorld.setEnabled(settings.useGpu && settings.speed != Workers.Speed.LIGHT);
     }
 
     private void add(String id, JComponent page) {
@@ -155,8 +161,11 @@ public final class SeedFinderApp {
         engine.setText("Loading the world generator…");
         Thread t = new Thread(() -> {
             Mc.lookup();
-            WorldGen.of(s.value(), Dim.OVERWORLD, s.type);
+            WorldGen w = WorldGen.of(s.value(), Dim.OVERWORLD, s.type);
             SwingUtilities.invokeLater(() -> engine.setText("Minecraft 1.21.11 world generator ready"));
+            // Get the graphics card ready too (compiling and checking it takes a few seconds the first time).
+            if (dev.steelaspect.seedfinder.engine.GpuWorld.of(w) != null)
+                SwingUtilities.invokeLater(() -> engine.setText("World generator ready · graphics card on"));
         }, "warm-up");
         t.setDaemon(true);
         t.start();

@@ -54,6 +54,9 @@ final class SettingsPage extends JPanel {
         column.add(section("Map", "Map tiles you've looked at are kept on disk so they draw instantly next time (up to "
                 + TileCache.LIMIT / 1024 / 1024 + " MB, oldest removed first).", mapPanel()));
         column.add(gap());
+        column.add(section("Graphics card", "Biomes for the map and for biome and solid searches can be worked out on the graphics card: "
+                + "the game's own generator rebuilt for it, checked against Minecraft before it's used. Not used at Light speed.", gpuPanel()));
+        column.add(gap());
         column.add(section("Files", "Settings: " + Settings.FILE + "\nSaved results: " + History.DIR + "\nMap cache: " + TileCache.DIR, null));
         JPanel holder = Ui.clear(new BorderLayout());
         holder.add(column, BorderLayout.NORTH);
@@ -159,6 +162,45 @@ final class SettingsPage extends JPanel {
         return p;
     }
 
+    private final JCheckBox useGpu = Ui.check("Use the graphics card", true);
+    private final JLabel gpuStatus = Ui.muted(" ");
+
+    private JComponent gpuPanel() {
+        useGpu.addActionListener(e -> {
+            app.settings().useGpu = useGpu.isSelected();
+            app.settings().save();
+            app.applyGpu();
+            showGpu();
+        });
+        JPanel p = Ui.clear(new java.awt.GridLayout(0, 1, 0, 8));
+        p.add(useGpu);
+        p.add(gpuStatus);
+        return p;
+    }
+
+    /** The card's name and how its check went, worked out in the background (it can take a few seconds). */
+    private void showGpu() {
+        useGpu.setSelected(app.settings().useGpu);
+        gpuStatus.setText("Checking the graphics card…");
+        Settings.Seed seed = app.seed();
+        Thread t = new Thread(() -> {
+            String text;
+            if (!app.settings().useGpu) {
+                text = "Off. Searches and the map use the CPU.";
+            } else if (app.settings().speed == dev.steelaspect.seedfinder.engine.Workers.Speed.LIGHT) {
+                text = "Not used at Light speed.";
+            } else {
+                var g = dev.steelaspect.seedfinder.engine.GpuWorld.of(
+                        dev.steelaspect.seedfinder.engine.WorldGen.of(seed.value(), dev.steelaspect.seedfinder.engine.Dim.OVERWORLD, seed.type));
+                text = g != null ? dev.steelaspect.seedfinder.gpu.Gpu.status() + " · " + g.check
+                        : "Not available: " + dev.steelaspect.seedfinder.engine.GpuWorld.lastProblem() + ". Searches and the map use the CPU.";
+            }
+            javax.swing.SwingUtilities.invokeLater(() -> gpuStatus.setText(text));
+        }, "gpu-status");
+        t.setDaemon(true);
+        t.start();
+    }
+
     private final JLabel cacheSize = Ui.muted(" ");
 
     private JComponent mapPanel() {
@@ -212,6 +254,7 @@ final class SettingsPage extends JPanel {
         category.setText(s.cwayCategory);
         eula.setSelected(s.eulaAccepted);
         serverJar.setText(s.serverJar);
+        showGpu();
         saved.setText(" ");
         showCacheSize();
     }

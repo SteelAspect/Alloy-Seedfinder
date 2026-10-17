@@ -19,4 +19,9 @@ if [ -z "$JAVA" ]; then
   echo "Cytra Seed Finder needs Java 21. Play Minecraft 1.21 once (its launcher installs Java 21), or install it from https://adoptium.net" >&2
   exit 1
 fi
-exec "$JAVA" -XX:MaxRAMPercentage=60 -jar "$DIR/CytraSeedFinder.jar" "$@"
+# The graphics card code talks to the OpenCL driver through Java's foreign function API (a preview in Java 21).
+# JDK_JAVA_OPTIONS is read by Java 9 and newer only, so an old Java still shows the app's "needs Java 21" message.
+export JDK_JAVA_OPTIONS="--enable-preview --enable-native-access=ALL-UNNAMED${JDK_JAVA_OPTIONS:+ $JDK_JAVA_OPTIONS}"
+# Mesa's OpenCL (rusticl) only offers 64-bit maths when asked.
+case ",${RUSTICL_FEATURES:-}," in *,fp64,*) ;; *) export RUSTICL_FEATURES="${RUSTICL_FEATURES:+$RUSTICL_FEATURES,}fp64" ;; esac
+exec "$JAVA" -XX:MaxRAMPercentage=40 -jar "$DIR/CytraSeedFinder.jar" "$@"

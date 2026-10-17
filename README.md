@@ -76,6 +76,28 @@ each structure gets a plain biome list. Minecraft breaks exact biome ties by loo
 lastResult), so a handful of tie cells can differ between runs, as in the game itself.
 `seedfinder screenshot <file> [page|search:<page>]` draws the window to a PNG without showing it.
 
+## Graphics card (GPU)
+
+Map tiles, biome searches and solid-area refinement can run on the graphics card through OpenCL (any card with
+64-bit floating point: `cl_khr_fp64`). Nothing native is shipped: `src-ffm/.../OpenClFfm` calls the system's OpenCL
+driver through Java's foreign function API, built twice (`gpu.ffm21` for Java 21 with `--enable-preview`, `gpu.ffm22`
+for Java 22+); the launchers set `JDK_JAVA_OPTIONS` and, for Mesa's rusticl, `RUSTICL_FEATURES=fp64`.
+
+1:1 with the game: `GpuCode` writes the OpenCL program from the game's own objects for the world type (the climate
+sampler's density functions, the preliminary surface level, every noise octave, spline and the biome parameter
+tree), node for node in the same arithmetic order. Drivers aren't trusted with what they get wrong: double division,
+double-to-float rounding and float subnormals are done with integer bit operations (rusticl's division is not
+correctly rounded and it drops float rounding before conversions). Splines run through one table-driven loop so the
+program stays small (the driver's compiler ran out of memory on the fully unrolled version).
+
+Exact ties (two biomes exactly as close, about 3 cells in 10,000) are settled the way chunk generation does: the
+game's lookup with the previous cell of the chunk's fill order as its last result (`ClimateTree.inGame`, used by the
+CPU path too, so results no longer depend on thread scheduling). Checked against the game generating real chunks
+(`doCreateBiomes` on ProtoChunks): 2.55M biome cells over 1,980 chunks (3 seeds, nether, large biomes, amplified,
+the world border), 0 differences; 5M climate points bit for bit; each world is self-checked on 16,384 spots before
+use. Each run is sized to about 40 ms so no driver watchdog resets the card; compiled programs are cached in
+`<cache>/gpu`. Off in Settings or at Light speed; `--cpu` on the command line.
+
 ## Files
 
 Settings: `~/.config/cytra-seedfinder` (Windows `%APPDATA%\CytraSeedFinder`). Saved results and Minecraft files:

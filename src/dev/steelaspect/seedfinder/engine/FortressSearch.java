@@ -177,7 +177,7 @@ public final class FortressSearch {
         try {
             BoundingBox box = (BoundingBox) TEMPLATE_BOX.invoke(null, new BlockPos(chunk.getMinBlockX(), 33, chunk.getMinBlockZ()), rotation, BlockPos.ZERO, Mirror.NONE, size);
             int cx = (box.maxX() + box.minX()) / 2, cz = (box.maxZ() + box.minZ()) / 2;
-            return !bastion.value().biomes().contains(w.biome(cx, 33, cz));
+            return !bastion.value().biomes().contains(w.noiseBiome(cx, 33, cz));
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }

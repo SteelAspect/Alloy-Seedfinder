@@ -26,4 +26,6 @@ if not defined JAVA (
   pause
   exit /b 1
 )
-start "" "%JAVA%" -XX:MaxRAMPercentage=60 -jar "%~dp0CytraSeedFinder.jar" %*
+rem The graphics card code talks to the OpenCL driver through Java's foreign function API (a preview in Java 21).
+set "JDK_JAVA_OPTIONS=--enable-preview --enable-native-access=ALL-UNNAMED %JDK_JAVA_OPTIONS%"
+start "" "%JAVA%" -XX:MaxRAMPercentage=40 -jar "%~dp0CytraSeedFinder.jar" %*

@@ -53,6 +53,7 @@ final class Cli {
                              --speed fast|balanced|light (default fast)
                              --serial-fortresses   build fortresses one at a time the old way (same results, slower)
                              --exact   skip the quick first pass for biome/solid searches (same results, about 2x slower)
+                             --cpu     don't use the graphics card (same results, slower)
                              --verify n --accept-eula   check the first n results on a real server (accepts the Minecraft EULA)
             """;
 
@@ -72,6 +73,7 @@ final class Cli {
             return 2;
         }
         Map<String, String> opt = new HashMap<>();
+        boolean cpuOnly = false;
         Settings.Seed seed = new Settings.Seed("seed", args[0], WorldType.NORMAL);
         for (int i = 1; i < args.length; i++) {
             String a = args[i];
@@ -79,6 +81,7 @@ final class Cli {
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
             else if (a.equals("--nether") || a.equals("--joined") || a.equals("--accept-eula")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
+            else if (a.equals("--cpu")) cpuOnly = true;
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
             else if (a.equals("--speed") && i + 1 < args.length) Workers.set(Workers.Speed.valueOf(args[++i].toUpperCase(Locale.ROOT)));
             else if (a.startsWith("--") && i + 1 < args.length) opt.put(a, args[++i]);
@@ -93,6 +96,8 @@ final class Cli {
         int top = Integer.parseInt(opt.getOrDefault("--top", "25"));
         int step = BiomeSearch.safeStep(area.radius(), Integer.parseInt(opt.getOrDefault("--step", "32")));
         List<String> biomes = opt.containsKey("--biomes") ? List.of(opt.get("--biomes").split(",")) : null;
+        // The graphics card, like in the app: not with --cpu or at Light speed.
+        dev.steelaspect.seedfinder.engine.GpuWorld.setEnabled(!cpuOnly && Workers.speed() != Workers.Speed.LIGHT);
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
         Progress p = progress();
         long start = System.nanoTime();
@@ -121,7 +126,8 @@ final class Cli {
             }
         });
         if (results == null) return 2;
-        OUT.printf(Locale.ROOT, "%n  done in %.1f s%n%n", (System.nanoTime() - start) / 1e9);
+        OUT.printf(Locale.ROOT, "%n  done in %.1f s%s%n%n", (System.nanoTime() - start) / 1e9,
+                dev.steelaspect.seedfinder.engine.GpuWorld.used() ? " (graphics card: " + dev.steelaspect.seedfinder.gpu.Gpu.status() + ")" : "");
         print(results);
         if (opt.containsKey("--verify")) return verify(results, Integer.parseInt(opt.get("--verify")), seed, opt.containsKey("--accept-eula"));
         return 0;

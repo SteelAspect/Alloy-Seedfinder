@@ -30,6 +30,18 @@ L=src/dev/steelaspect/seedfinder/launcher
 mapfile -t SRC < <(find src -name "*.java" ! -path "*/launcher/Launcher.java" ! -path "*/launcher/AppDirs.java")
 CP="$OUT:lib/*:$(IFS=:; echo "${DEPS[*]}")"
 "$J/javac" -nowarn --release 21 -d "$OUT" -cp "$CP" "${SRC[@]}"
+# The graphics card code (src-ffm) twice: for Java 21 (a preview there, run with --enable-preview) and Java 22+.
+GPU_TMP=$(mktemp -d)
+FFM=src-ffm/dev/steelaspect/seedfinder/gpu/ffm/OpenClFfm.java
+mkdir -p "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21" "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22"
+sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm21;/' "$FFM" > "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
+sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm22;/' "$FFM" > "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
+"$J/javac" -nowarn -XDsuppressNotes --release 21 --enable-preview -d "$OUT" -cp "$OUT" "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
+JDK22="${JAVA22_HOME:+$JAVA22_HOME/bin/javac}"
+[ -n "$JDK22" ] || JDK22=$(for j in /usr/lib/jvm/*/bin/javac; do v=$("$j" -version 2>&1 | grep -oP '\d+' | head -1); [ "${v:-0}" -ge 22 ] && echo "$j" && break; done || true)
+[ -n "$JDK22" ] || { echo "Need a JDK 22 or newer for the Java 22+ graphics card code (set JAVA22_HOME)." >&2; exit 1; }
+"$JDK22" -nowarn --release 22 -d "$OUT" -cp "$OUT" "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
+rm -rf "$GPU_TMP"
 cp resources/* "$OUT/"
 
 NAME="CytraSeedFinder-$VERSION"

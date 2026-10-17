@@ -28,11 +28,25 @@ mapfile -t SRC < <(find "$DIR/src" -name "*.java")
 # The first-run converter libraries (only needed to compile the launcher; Minecraft comes from lib/ here).
 G="$HOME/.gradle/caches/modules-2/files-2.1"
 DEPS="$(ls "$G"/net.fabricmc/tiny-remapper/0.14.1/*/tiny-remapper-0.14.1.jar "$G"/net.fabricmc/mapping-io/0.8.0/*/mapping-io-0.8.0.jar | tr '\n' ':')"
-if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" -name '*.java' -newer "$OUT/.built")" ]; then
+if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" "$DIR/src-ffm" -name '*.java' -newer "$OUT/.built")" ]; then
   rm -rf "$OUT" && mkdir -p "$OUT"
   "$JAVA_HOME/bin/javac" -nowarn -d "$OUT" -cp "$LIB/*:$DEPS" "${SRC[@]}"
+  # The graphics card code (src-ffm), once per Java: a Java 21 preview build, and a Java 22+ build if there's a newer JDK.
+  GPU_TMP=$(mktemp -d)
+  mkdir -p "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21"
+  sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm21;/' "$DIR/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/OpenClFfm.java" > "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
+  "$JAVA_HOME/bin/javac" -nowarn -XDsuppressNotes --release 21 --enable-preview -d "$OUT" -cp "$OUT" "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
+  JDK22=$(for j in /usr/lib/jvm/*/bin/javac; do v=$("$j" -version 2>&1 | grep -oP '\d+' | head -1); [ "${v:-0}" -ge 22 ] && echo "$j" && break; done || true)
+  if [ -n "$JDK22" ]; then
+    mkdir -p "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22"
+    sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm22;/' "$DIR/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/OpenClFfm.java" > "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
+    "$JDK22" -nowarn --release 22 -d "$OUT" -cp "$OUT" "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
+  fi
+  rm -rf "$GPU_TMP"
   cp "$DIR"/resources/* "$OUT/"
   touch "$OUT/.built"
 fi
 
-exec "$JAVA_HOME/bin/java" -Xmx${SEEDFINDER_XMX:-8G} -cp "$OUT:$LIB/*" dev.steelaspect.seedfinder.Main "$@"
+# Mesa's OpenCL (rusticl) only offers 64-bit maths when asked; the graphics card code needs it.
+case ",${RUSTICL_FEATURES:-}," in *,fp64,*) ;; *) export RUSTICL_FEATURES="${RUSTICL_FEATURES:+$RUSTICL_FEATURES,}fp64" ;; esac
+exec "$JAVA_HOME/bin/java" --enable-preview --enable-native-access=ALL-UNNAMED -Xmx${SEEDFINDER_XMX:-8G} -cp "$OUT:$LIB/*" dev.steelaspect.seedfinder.Main "$@"

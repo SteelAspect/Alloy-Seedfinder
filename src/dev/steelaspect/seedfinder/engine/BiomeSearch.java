@@ -57,6 +57,8 @@ public final class BiomeSearch {
     public static Grid sample(WorldGen world, Search area, int step, Set<String> wanted, Progress progress) {
         int n = (int) (area.radius() * 2L / step + 1);
         int x0 = area.centerX() - (n / 2) * step, z0 = area.centerZ() - (n / 2) * step;
+        String[] onGpu = gpu(world, x0, z0, step, n, progress);
+        if (onGpu != null) return new Grid(onGpu, n, x0, z0, step);
         String[] cells = new String[n * n];
         boolean twoPass = !forceFullExact && world.dim == Dim.OVERWORLD && wanted.stream().noneMatch(CAVE_BIOMES::contains);
         AtomicInteger rows = new AtomicInteger();
@@ -88,6 +90,25 @@ public final class BiomeSearch {
             });
         }
         return new Grid(cells, n, x0, z0, step);
+    }
+
+    /**
+     * The exact biome (biomeAt) of every cell on the graphics card, in bands of rows so progress and Stop work.
+     * Null if there's no card (or it fails part way): then the CPU does it.
+     */
+    private static String[] gpu(WorldGen world, int x0, int z0, int step, int n, Progress progress) {
+        if (GpuWorld.of(world) == null) return null;
+        String[] cells = new String[n * n];
+        int band = Math.max(1, (1 << 20) / n);
+        for (int row = 0; row < n; row += band) {
+            progress.check();
+            int rows = Math.min(band, n - row);
+            String[] part = world.gpuGrid(false, x0, z0 + row * step, step, n, rows);
+            if (part == null) return null;
+            System.arraycopy(part, 0, cells, row * n, part.length);
+            progress.update(0.9 * (row + rows) / n, "Checking biomes (graphics card)");
+        }
+        return cells;
     }
 
     public static List<Result> run(Params p, Progress progress) {

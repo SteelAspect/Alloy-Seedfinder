@@ -191,8 +191,9 @@ public final class SolidSearch {
         int fx0 = Math.floorDiv(g.x0() + b.col() * step - step, FINE) * FINE;
         int fz0 = Math.floorDiv(g.z0() + b.row() * step - step, FINE) * FINE;
         int cols = (b.width() + 2) * step / FINE + 1, rows = (b.height() + 2) * step / FINE + 1;
-        String[] fine = new String[cols * rows];
-        IntStream.range(0, rows).parallel().forEach(r -> {
+        String[] gpu = world.gpuGrid(false, fx0, fz0, FINE, cols, rows);
+        String[] fine = gpu != null ? gpu : new String[cols * rows];
+        if (gpu == null) IntStream.range(0, rows).parallel().forEach(r -> {
             for (int c = 0; c < cols; c++) fine[r * cols + c] = world.biomeAt(fx0 + c * FINE, fz0 + r * FINE);
         });
         Map<String, List<Box>> found = new HashMap<>();
