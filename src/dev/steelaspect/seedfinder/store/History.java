@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-/** Every finished search, saved in ~/.local/share/cytra-seedfinder/history/ so it can be reopened. */
+/** Every finished search, saved in ~/.local/share/alloy-seedfinder/history/ so it can be reopened. */
 public final class History {
     public static final Path DIR = AppDirs.data().toPath().resolve("history");
 

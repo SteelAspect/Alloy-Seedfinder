@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cytra Seed Finder, development launcher (no arguments opens the app). Uses the Minecraft jars from the
+# Alloy Seed Finder, development launcher (no arguments opens the app). Uses the Minecraft jars from the
 # Fabric Loom cache instead of the first-run download. To build the shareable zip, use ./build.sh.: sets up lib/ from your Minecraft 1.21.11 files (first run only), compiles, runs.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"

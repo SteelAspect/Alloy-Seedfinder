@@ -230,7 +230,7 @@ public final class Ui {
         f.setFont(Theme.FONT);
         f.setForeground(Theme.TEXT);
         f.setCaretColor(Theme.TEXT);
-        f.setSelectionColor(new Color(0x4A3125));
+        f.setSelectionColor(Theme.SELECTED);
         FieldBorder border = new FieldBorder();
         f.setBorder(border);
         f.addFocusListener(new FocusAdapter() {
@@ -264,7 +264,7 @@ public final class Ui {
             if (comp instanceof JLabel l) {
                 l.setBorder(BorderFactory.createEmptyBorder(5, index < 0 ? 0 : 10, 5, 10));
                 l.setForeground(Theme.TEXT);
-                l.setBackground(selected && index >= 0 ? new Color(0x4A3125) : index < 0 ? Theme.FIELD : Theme.PANEL);
+                l.setBackground(selected && index >= 0 ? Theme.SELECTED : index < 0 ? Theme.FIELD : Theme.PANEL);
                 l.setOpaque(index >= 0);
             }
             return comp;

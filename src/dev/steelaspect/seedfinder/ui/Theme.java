@@ -25,10 +25,12 @@ public final class Theme {
     public static final Color TEXT = new Color(0xE7E9EE);
     public static final Color TEXT2 = new Color(0xA3AAB6);
     public static final Color TEXT3 = new Color(0x6F7784);
-    public static final Color ACCENT = new Color(0xE8743B);
-    public static final Color ACCENT_HOVER = new Color(0xF08A55);
-    public static final Color ACCENT_SOFT = new Color(232, 116, 59, 46);
-    public static final Color ON_ACCENT = new Color(0x1A0E07);
+    public static final Color ACCENT = new Color(0x4682B4);
+    public static final Color ACCENT_HOVER = new Color(0x5A97CB);
+    public static final Color ACCENT_SOFT = new Color(70, 130, 180, 46);
+    public static final Color ON_ACCENT = new Color(0xF4F7FC);
+    /** Background of selected rows and text (the accent, dimmed). */
+    public static final Color SELECTED = new Color(0x25384B);
     public static final Color SUCCESS = new Color(0x3FB27F);
     public static final Color DANGER = new Color(0xE5534B);
     public static final Color WARNING = new Color(0xD9A441);
@@ -102,7 +104,7 @@ public final class Theme {
     }
 
     private static Color ACCENT_SOFT_SOLID() {
-        return new Color(0x4A3125);
+        return SELECTED;
     }
 
     private static void put(Color c, String... keys) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the shareable zip: dist/CytraSeedFinder-<version>.zip
+# Builds the shareable zip: dist/AlloySeedFinder-<version>.zip
 # Needs: JDK 21 (PrismLauncher's by default), lib/ filled by ./seedfinder once (Minecraft jars to compile against,
 # never packaged), and the converter libraries from the Gradle cache (packaged; LGPL/Apache/BSD licensed).
 set -euo pipefail
@@ -44,7 +44,7 @@ JDK22="${JAVA22_HOME:+$JAVA22_HOME/bin/javac}"
 rm -rf "$GPU_TMP"
 cp resources/* "$OUT/"
 
-NAME="CytraSeedFinder-$VERSION"
+NAME="AlloySeedFinder-$VERSION"
 STAGE="$DIR/dist/$NAME"
 rm -rf "$STAGE" && mkdir -p "$STAGE/libs" "$STAGE/licenses"
 LIBS=()
@@ -60,12 +60,12 @@ def wrap(line):
     return "\n".join(out)
 print("Main-Class: dev.steelaspect.seedfinder.launcher.Launcher")
 print(wrap("Class-Path: " + " ".join(sys.argv[2:])))
-print("Implementation-Title: Cytra Seed Finder")
+print("Implementation-Title: Alloy Seed Finder")
 print("Implementation-Version: " + sys.argv[1])
 PY
-"$J/jar" --create --file "$STAGE/CytraSeedFinder.jar" --manifest build/manifest.txt -C "$OUT" .
+"$J/jar" --create --file "$STAGE/AlloySeedFinder.jar" --manifest build/manifest.txt -C "$OUT" .
 cp packaging/* "$STAGE/"
-sed -i 's/$/\r/' "$STAGE/Cytra Seed Finder.bat" "$STAGE/README.txt"
+sed -i 's/$/\r/' "$STAGE/Alloy Seed Finder.bat" "$STAGE/README.txt"
 "$J/java" -cp "$OUT" dev.steelaspect.seedfinder.ui.AppIcon "$STAGE/icon.png"
 cp packaging-licenses/* "$STAGE/licenses/" 2>/dev/null || true
 chmod +x "$STAGE"/*.sh

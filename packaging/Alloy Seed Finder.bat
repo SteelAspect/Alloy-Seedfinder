@@ -1,5 +1,5 @@
 @echo off
-rem Cytra Seed Finder for Windows: finds Java 21 (the Minecraft launcher's own Java works) and opens the app.
+rem Alloy Seed Finder for Windows: finds Java 21 (the Minecraft launcher's own Java works) and opens the app.
 setlocal
 cd /d "%~dp0"
 set "JAVA="
@@ -18,7 +18,7 @@ rem Last try: whatever javaw is on the PATH (the app says so if it's too old).
 if not defined JAVA for %%J in (javaw.exe) do if not "%%~$PATH:J"=="" set "JAVA=%%~$PATH:J"
 
 if not defined JAVA (
-  echo Cytra Seed Finder needs Java 21.
+  echo Alloy Seed Finder needs Java 21.
   echo.
   echo Easiest: open the Minecraft launcher and play 1.21 once ^(it installs Java 21^), then try again.
   echo Or install Java 21 from adoptium.net ^(opening it now^).
@@ -28,4 +28,4 @@ if not defined JAVA (
 )
 rem The graphics card code talks to the OpenCL driver through Java's foreign function API (a preview in Java 21).
 set "JDK_JAVA_OPTIONS=--enable-preview --enable-native-access=ALL-UNNAMED %JDK_JAVA_OPTIONS%"
-start "" "%JAVA%" -XX:MaxRAMPercentage=40 -jar "%~dp0CytraSeedFinder.jar" %*
+start "" "%JAVA%" -XX:MaxRAMPercentage=40 -jar "%~dp0AlloySeedFinder.jar" %*

@@ -1,4 +1,4 @@
-Cytra Seed Finder includes these libraries, unchanged, in the libs/ folder:
+Alloy Seed Finder includes these libraries, unchanged, in the libs/ folder:
 
   tiny-remapper 0.14.1   FabricMC   LGPL-3.0     https://github.com/FabricMC/tiny-remapper   (LGPL-3.0.txt, GPL-3.0.txt)
   mapping-io 0.8.0       FabricMC   Apache-2.0   https://github.com/FabricMC/mapping-io      (Apache-2.0.txt)

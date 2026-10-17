@@ -43,8 +43,8 @@ import java.util.Map;
 
 /** The main window: top bar with the seed, sidebar with the tools, and the current page. */
 public final class SeedFinderApp {
-    public static final String NAME = "Cytra Seed Finder";
-    public static final String VERSION = "2.3.0";
+    public static final String NAME = "Alloy Seed Finder";
+    public static final String VERSION = "2.4.0";
 
     private final Settings settings = Settings.load();
     private final JFrame frame = new JFrame(NAME);
@@ -63,7 +63,7 @@ public final class SeedFinderApp {
 
     public SeedFinderApp() {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setIconImage(AppIcon.image(64));
+        frame.setIconImages(java.util.List.of(AppIcon.image(16), AppIcon.image(32), AppIcon.image(64), AppIcon.image(128)));
         frame.setMinimumSize(new Dimension(1100, 700));
         frame.setSize(1380, 880);
         JPanel root = new JPanel(new BorderLayout());
@@ -236,7 +236,7 @@ public final class SeedFinderApp {
             }
         };
         Theme.pad(bar, 10, 16, 10, 16);
-        JLabel logo = new JLabel(new javax.swing.ImageIcon(AppIcon.image(30)));
+        JLabel logo = new JLabel(new javax.swing.ImageIcon(AppIcon.mark(30)));
         JLabel name = Ui.label(NAME);
         name.setFont(Theme.FONT_TITLE);
         JPanel left = Ui.row(10, logo, name);

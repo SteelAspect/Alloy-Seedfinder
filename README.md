@@ -1,4 +1,4 @@
-# Cytra Seed Finder
+# Alloy Seed Finder
 
 A desktop app (and command line) that finds the biggest biomes and the best structures in a Minecraft
 **1.21.11** seed. It runs Minecraft's own world generator, so results match the real game; a **Verify** button
@@ -22,8 +22,8 @@ or `/cway add` commands, CSV and map image export, saved results, and a Speed se
 
 ## Sharing it
 
-`./build.sh` makes `dist/CytraSeedFinder-<version>.zip` (about 1 MB). Windows users double-click
-`Cytra Seed Finder.bat`; Linux/Mac users run `cytra-seedfinder.sh` (`install-linux.sh` adds an app menu entry).
+`./build.sh` makes `dist/AlloySeedFinder-<version>.zip` (about 1 MB). Windows users double-click
+`Alloy Seed Finder.bat`; Linux/Mac users run `alloy-seedfinder.sh` (`install-linux.sh` adds an app menu entry).
 Both find Java 21 by themselves, including the one the Minecraft launcher installs.
 
 No Minecraft code is in the zip. On first start the app downloads the official 1.21.11 server jar and mappings
@@ -113,5 +113,5 @@ use. Each run is sized to about 40 ms so no driver watchdog resets the card; com
 
 ## Files
 
-Settings: `~/.config/cytra-seedfinder` (Windows `%APPDATA%\CytraSeedFinder`). Saved results and Minecraft files:
-`~/.local/share/cytra-seedfinder` (Windows `%LOCALAPPDATA%\CytraSeedFinder`).
+Settings: `~/.config/alloy-seedfinder` (Windows `%APPDATA%\AlloySeedFinder`). Saved results and Minecraft files:
+`~/.local/share/alloy-seedfinder` (Windows `%LOCALAPPDATA%\AlloySeedFinder`).

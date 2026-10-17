@@ -14,11 +14,11 @@ public final class Launcher {
 
     public static void main(String[] args) throws Exception {
         if (javaVersion() < JAVA_NEEDED) {
-            String msg = "Cytra Seed Finder needs Java " + JAVA_NEEDED + " or newer (this is Java " + System.getProperty("java.version") + ").\n\n"
+            String msg = "Alloy Seed Finder needs Java " + JAVA_NEEDED + " or newer (this is Java " + System.getProperty("java.version") + ").\n\n"
                     + "Easiest: open the Minecraft launcher and play 1.21 once (it installs Java 21), then start the Seed Finder again.\n"
                     + "Or install Java 21 from https://adoptium.net";
             if (GraphicsEnvironment.isHeadless() || args.length > 0) System.err.println(msg);
-            else JOptionPane.showMessageDialog(null, msg, "Cytra Seed Finder", JOptionPane.WARNING_MESSAGE);
+            else JOptionPane.showMessageDialog(null, msg, "Alloy Seed Finder", JOptionPane.WARNING_MESSAGE);
             System.exit(1);
         }
         Class.forName("dev.steelaspect.seedfinder.launcher.Boot").getMethod("main", String[].class).invoke(null, (Object) args);

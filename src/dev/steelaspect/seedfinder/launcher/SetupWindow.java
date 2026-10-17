@@ -54,7 +54,7 @@ final class SetupWindow {
 
     private static JFrame build(Setup setup, CountDownLatch done, AtomicBoolean ok) {
         {
-            JFrame f = new JFrame("Cytra Seed Finder");
+            JFrame f = new JFrame("Alloy Seed Finder");
             f.setIconImage(AppIcon.image(64));
             f.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
             f.addWindowListener(new java.awt.event.WindowAdapter() {
@@ -67,7 +67,7 @@ final class SetupWindow {
             body.setBackground(Theme.PANEL);
             Theme.pad(body, 24, 26, 22, 26);
             JLabel title = Ui.title("Getting Minecraft's world generator");
-            title.setIcon(new javax.swing.ImageIcon(AppIcon.image(28)));
+            title.setIcon(new javax.swing.ImageIcon(AppIcon.mark(28)));
             title.setIconTextGap(12);
             body.add(title, BorderLayout.NORTH);
             JPanel text = Ui.clear(new GridLayout(0, 1, 0, 4));

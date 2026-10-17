@@ -14,7 +14,7 @@ public final class Main {
         Thread.currentThread().setContextClassLoader(Main.class.getClassLoader());
         // Minecraft's startup redirects System.err into its logger; print crashes where people can see them.
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
-            Mc.ERR.println("Cytra Seed Finder crashed in " + t.getName() + ":");
+            Mc.ERR.println("Alloy Seed Finder crashed in " + t.getName() + ":");
             e.printStackTrace(Mc.ERR);
         });
         if (args.length > 0 && !args[0].equals("--gui")) {

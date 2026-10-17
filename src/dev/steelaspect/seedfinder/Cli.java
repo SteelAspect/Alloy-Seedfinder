@@ -36,7 +36,7 @@ import java.util.Map;
 final class Cli {
     private static final PrintStream OUT = Mc.OUT;
     private static final String HELP = """
-            Cytra Seed Finder %s - finds biomes and structures in a Minecraft 1.21.11 seed.
+            Alloy Seed Finder %s - finds biomes and structures in a Minecraft 1.21.11 seed.
 
             Run with no arguments to open the app. Command line:
 

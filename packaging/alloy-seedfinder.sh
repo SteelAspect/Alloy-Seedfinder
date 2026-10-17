@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Cytra Seed Finder for Linux and Mac: finds Java 21 (the Minecraft launcher's own Java works) and opens the app.
-# With arguments it runs the command line instead, e.g.: ./cytra-seedfinder.sh huts 12345 --max-y -50
+# Alloy Seed Finder for Linux and Mac: finds Java 21 (the Minecraft launcher's own Java works) and opens the app.
+# With arguments it runs the command line instead, e.g.: ./alloy-seedfinder.sh huts 12345 --max-y -50
 DIR="$(cd "$(dirname "$0")" && pwd)"
 candidates=(
   "${JAVA_HOME:+$JAVA_HOME/bin/java}"
@@ -16,7 +16,7 @@ for c in "${candidates[@]}"; do
 done
 [ -z "$JAVA" ] && command -v java >/dev/null && JAVA="$(command -v java)"
 if [ -z "$JAVA" ]; then
-  echo "Cytra Seed Finder needs Java 21. Play Minecraft 1.21 once (its launcher installs Java 21), or install it from https://adoptium.net" >&2
+  echo "Alloy Seed Finder needs Java 21. Play Minecraft 1.21 once (its launcher installs Java 21), or install it from https://adoptium.net" >&2
   exit 1
 fi
 # The graphics card code talks to the OpenCL driver through Java's foreign function API (a preview in Java 21).
@@ -24,4 +24,4 @@ fi
 export JDK_JAVA_OPTIONS="--enable-preview --enable-native-access=ALL-UNNAMED${JDK_JAVA_OPTIONS:+ $JDK_JAVA_OPTIONS}"
 # Mesa's OpenCL (rusticl) only offers 64-bit maths when asked.
 case ",${RUSTICL_FEATURES:-}," in *,fp64,*) ;; *) export RUSTICL_FEATURES="${RUSTICL_FEATURES:+$RUSTICL_FEATURES,}fp64" ;; esac
-exec "$JAVA" -XX:MaxRAMPercentage=40 -jar "$DIR/CytraSeedFinder.jar" "$@"
+exec "$JAVA" -XX:MaxRAMPercentage=40 -jar "$DIR/AlloySeedFinder.jar" "$@"

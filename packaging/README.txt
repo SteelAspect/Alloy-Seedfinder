@@ -1,4 +1,4 @@
-Cytra Seed Finder
+Alloy Seed Finder
 =================
 
 Finds the biggest biomes and the best structures in a Minecraft 1.21.11 seed, and the best spots for farms.
@@ -14,8 +14,8 @@ It uses Minecraft's own world generator, so results match the real game.
   Nether biomes, Fortresses   biggest nether biomes; biggest fortresses with a wither skeleton AFK spot
 
 Start it
-  Windows:      double-click "Cytra Seed Finder.bat"
-  Linux / Mac:  run ./cytra-seedfinder.sh   (Linux app menu icon: run ./install-linux.sh once)
+  Windows:      double-click "Alloy Seed Finder.bat"
+  Linux / Mac:  run ./alloy-seedfinder.sh   (Linux app menu icon: run ./install-linux.sh once)
 
 It needs Java 21. If you've played Minecraft 1.21 with the normal launcher, that Java is found automatically.
 Otherwise get Java 21 from https://adoptium.net
@@ -33,11 +33,11 @@ Verify
   afterwards). Running a Minecraft server means accepting the Minecraft EULA; the app asks first.
 
 Command line
-  ./cytra-seedfinder.sh --help         (Windows: java -jar CytraSeedFinder.jar --help)
+  ./alloy-seedfinder.sh --help         (Windows: java -jar AlloySeedFinder.jar --help)
 
 Files
-  Settings and saved results:  Windows %APPDATA%\CytraSeedFinder and %LOCALAPPDATA%\CytraSeedFinder,
-                               Linux ~/.config/cytra-seedfinder and ~/.local/share/cytra-seedfinder
+  Settings and saved results:  Windows %APPDATA%\AlloySeedFinder and %LOCALAPPDATA%\AlloySeedFinder,
+                               Linux ~/.config/alloy-seedfinder and ~/.local/share/alloy-seedfinder
 
 Made by steelaspect. Not an official Minecraft product; not approved by or associated with Mojang or Microsoft.
 Bundled libraries and their licenses are listed in licenses/NOTICE.txt.

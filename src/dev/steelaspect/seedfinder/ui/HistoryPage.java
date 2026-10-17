@@ -95,7 +95,7 @@ final class HistoryPage extends JPanel {
                 setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 8));
                 setForeground(col == 0 ? Theme.TEXT2 : Theme.TEXT);
                 setFont(col == 5 ? Theme.FONT_MONO : Theme.FONT);
-                setBackground(sel ? new Color(0x4A3125) : row % 2 == 1 ? new Color(0x23272F) : Theme.PANEL);
+                setBackground(sel ? Theme.SELECTED : row % 2 == 1 ? new Color(0x23272F) : Theme.PANEL);
                 return this;
             }
         });

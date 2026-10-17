@@ -21,18 +21,18 @@ public final class AppDirs {
     public static File config() {
         String home = System.getenv("SEEDFINDER_HOME");
         if (home != null && !home.isEmpty()) return new File(home, "config");
-        if (windows()) return new File(env("APPDATA", userHome() + "\\AppData\\Roaming"), "CytraSeedFinder");
-        if (mac()) return new File(userHome(), "Library/Application Support/CytraSeedFinder");
-        return new File(env("XDG_CONFIG_HOME", userHome() + "/.config"), "cytra-seedfinder");
+        if (windows()) return named(env("APPDATA", userHome() + "\\AppData\\Roaming"), "AlloySeedFinder", "CytraSeedFinder");
+        if (mac()) return named(userHome() + "/Library/Application Support", "AlloySeedFinder", "CytraSeedFinder");
+        return named(env("XDG_CONFIG_HOME", userHome() + "/.config"), "alloy-seedfinder", "cytra-seedfinder");
     }
 
     /** Saved results and the downloaded Minecraft files (bigger). */
     public static File data() {
         String home = System.getenv("SEEDFINDER_HOME");
         if (home != null && !home.isEmpty()) return new File(home, "data");
-        if (windows()) return new File(env("LOCALAPPDATA", userHome() + "\\AppData\\Local"), "CytraSeedFinder");
-        if (mac()) return new File(userHome(), "Library/Application Support/CytraSeedFinder");
-        return new File(env("XDG_DATA_HOME", userHome() + "/.local/share"), "cytra-seedfinder");
+        if (windows()) return named(env("LOCALAPPDATA", userHome() + "\\AppData\\Local"), "AlloySeedFinder", "CytraSeedFinder");
+        if (mac()) return named(userHome() + "/Library/Application Support", "AlloySeedFinder", "CytraSeedFinder");
+        return named(env("XDG_DATA_HOME", userHome() + "/.local/share"), "alloy-seedfinder", "cytra-seedfinder");
     }
 
     /** Throwaway files (the Verify test server). */
@@ -40,8 +40,21 @@ public final class AppDirs {
         String home = System.getenv("SEEDFINDER_HOME");
         if (home != null && !home.isEmpty()) return new File(home, "cache");
         if (windows()) return new File(data(), "cache");
-        if (mac()) return new File(userHome(), "Library/Caches/CytraSeedFinder");
-        return new File(env("XDG_CACHE_HOME", userHome() + "/.cache"), "cytra-seedfinder");
+        if (mac()) return named(userHome() + "/Library/Caches", "AlloySeedFinder", "CytraSeedFinder");
+        return named(env("XDG_CACHE_HOME", userHome() + "/.cache"), "alloy-seedfinder", "cytra-seedfinder");
+    }
+
+    /**
+     * The folder with this name. The app was called Cytra Seed Finder before: a folder under the old name is moved to
+     * the new one the first time (or, if it can't be moved, used as it is), so settings and saved results carry over.
+     */
+    private static File named(String parent, String name, String old) {
+        File now = new File(parent, name);
+        if (!now.exists()) {
+            File before = new File(parent, old);
+            if (before.isDirectory() && !before.renameTo(now)) return before;
+        }
+        return now;
     }
 
     /** The converted Minecraft files for one version. */

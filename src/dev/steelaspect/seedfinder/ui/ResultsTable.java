@@ -115,7 +115,7 @@ public final class ResultsTable extends JTable {
             setHorizontalAlignment(SwingConstants.LEFT);
             setFont(name.equals("Coords") ? Theme.FONT_MONO : Theme.FONT);
             setForeground(name.equals("#") ? Theme.TEXT3 : Theme.TEXT);
-            setBackground(selected ? new Color(0x4A3125) : stripe ? new Color(0x23272F) : Theme.PANEL);
+            setBackground(selected ? Theme.SELECTED : stripe ? new Color(0x23272F) : Theme.PANEL);
             if (name.equals("Check")) {
                 String v = value == null ? "" : value.toString();
                 setForeground(v.equals("ok") ? Theme.SUCCESS : v.isEmpty() ? Theme.TEXT3 : v.equals("checking") ? Theme.WARNING : Theme.DANGER);

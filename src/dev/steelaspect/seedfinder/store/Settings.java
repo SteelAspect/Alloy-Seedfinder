@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** App settings, saved in ~/.config/cytra-seedfinder/settings.json. */
+/** App settings, saved in ~/.config/alloy-seedfinder/settings.json. */
 public final class Settings {
     public static final Path FILE = AppDirs.config().toPath().resolve("settings.json");
 
