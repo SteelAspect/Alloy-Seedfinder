@@ -8,6 +8,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructureSets;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 
 import java.io.PrintStream;
@@ -95,6 +96,7 @@ public final class QuadHunt {
                 for (long c : candidates(k, out, n, mon, base, RUN, SPAN)) {
                     if (!quad(chunks(mon, c, 0, 0), 0)) continue;
                     quads++;
+                    p.log().println("quad monument " + c);
                     for (Hit h : huts(hut, c, p.hutRange())) {
                         p.log().printf("structure seed %d: quad monument at 0,0, quad hut regions %d,%d (~%d, %d)%n",
                                 c, h.hx, h.hz, (h.hx + 1) * 512, (h.hz + 1) * 512);
@@ -243,5 +245,54 @@ public final class QuadHunt {
             for (int[] c : mons) if (Structures.start(w, monS, new ChunkPos(c[0], c[1]), true) == null) return false;
             return true;
         }).sorted().toList();
+    }
+
+    /** A low witch hut in one top-bit version of a structure seed: the full seed, its box corner and floor height. */
+    public record LowHut(long seed, int x, int y, int z) {}
+
+    /**
+     * Low witch huts near 0,0 in every top-bit version of a structure seed where the quad monument at 0,0 still
+     * generates. Hut positions are the same in every version; their height (the ground under them, caves carved)
+     * isn't. Sorted lowest first.
+     */
+    public static List<LowHut> lowHuts(long structureSeed, int radius, int maxY, Progress progress) {
+        WorldGen any = WorldGen.of(0, Dim.OVERWORLD, WorldType.NORMAL);
+        RandomSpreadStructurePlacement monP = Structures.placement(any, BuiltinStructureSets.OCEAN_MONUMENTS);
+        RandomSpreadStructurePlacement hutP = Structures.placement(any, BuiltinStructureSets.SWAMP_HUTS);
+        Holder<Structure> monS = Structures.structure(any, BuiltinStructures.OCEAN_MONUMENT);
+        Holder<Structure> hutS = Structures.structure(any, BuiltinStructures.SWAMP_HUT);
+        long s48 = structureSeed & MASK;
+        int[][] mons = chunks(monP, s48, 0, 0);
+        int size = hutP.spacing() * 16, lim = radius / size + 1;
+        List<ChunkPos> huts = new ArrayList<>();
+        for (int rx = -lim; rx <= lim; rx++)
+            for (int rz = -lim; rz <= lim; rz++) {
+                ChunkPos c = Structures.chunkIn(hutP, s48, rx, rz);
+                if (Math.max(Math.abs(c.getMinBlockX()), Math.abs(c.getMinBlockZ())) <= radius) huts.add(c);
+            }
+        java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger(), kept = new java.util.concurrent.atomic.AtomicInteger();
+        List<LowHut> out = IntStream.range(0, 1 << 16).parallel().mapToObj(top -> {
+            progress.check();
+            long seed = ((long) top << 48) | s48;
+            List<LowHut> low = new ArrayList<>();
+            WorldGen w = WorldGen.once(seed, Dim.OVERWORLD, WorldType.NORMAL);
+            boolean monuments = true;
+            for (int[] c : mons) if (monuments && Structures.start(w, monS, new ChunkPos(c[0], c[1]), true) == null) monuments = false;
+            if (monuments) kept.incrementAndGet();
+            if (monuments)
+                for (ChunkPos c : huts) {
+                    StructureStart st = Structures.start(w, hutS, c, true);
+                    if (st == null) continue;
+                    net.minecraft.world.level.levelgen.structure.BoundingBox b = st.getPieces().get(0).getBoundingBox();
+                    if (HutSearch.quickY(w, b) > maxY + 60) continue;
+                    int y = HutSearch.exactY(w, b);
+                    if (y <= maxY) low.add(new LowHut(seed, b.minX(), y, b.minZ()));
+                }
+            int d = done.incrementAndGet();
+            if (d % 2048 == 0) progress.update(d / 65536.0, "Top-bit versions");
+            return low;
+        }).flatMap(List::stream).sorted(java.util.Comparator.comparingInt(LowHut::y)).toList();
+        progress.update(1, out.size() + " low huts in the " + kept.get() + " versions that keep the quad monument (" + huts.size() + " hut spots in range)");
+        return out;
     }
 }

@@ -56,6 +56,7 @@ final class Cli {
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
               seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
+              seedfinder lowhuts <seed> [--radius 10000] [--max-y -30]                low huts near 0,0 in all 65,536 top-bit versions (quad monument kept)
               seedfinder fortresses <seed> [--crossroads [--max-y 60]]                most floor, or biggest joined crossroads (lines, corners, squares)
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
@@ -127,6 +128,16 @@ final class Cli {
             return 0;
         }
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
+        if (mode.equals("lowhuts")) {
+            int maxY = Integer.parseInt(opt.getOrDefault("--max-y", "-30"));
+            List<QuadHunt.LowHut> huts = QuadHunt.lowHuts(seed.value(), area.radius(), maxY, progress());
+            OUT.println();
+            for (QuadHunt.LowHut h : huts.subList(0, Math.min(top, huts.size())))
+                OUT.printf("  seed %d  hut %d, %d, %d (floor y %d, %d from 0,0)%n", h.seed(), h.x(), h.y(), h.z(), h.y() + 1,
+                        Math.round(Math.hypot(h.x(), h.z())));
+            OUT.println(huts.size() + " huts at or below y " + maxY + " within " + area.radius() + " of 0,0 (quad monument at 0,0 kept)");
+            return 0;
+        }
         if (mode.equals("quadseeds")) {
             List<Long> seeds = QuadHunt.run(new QuadHunt.Params(Long.parseLong(opt.getOrDefault("--from", "0")),
                     Long.parseLong(opt.getOrDefault("--count", "281474976710656")), Integer.parseInt(opt.getOrDefault("--hut-range", "30000")),

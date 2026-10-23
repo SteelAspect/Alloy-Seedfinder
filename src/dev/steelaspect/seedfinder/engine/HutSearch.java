@@ -83,7 +83,7 @@ public final class HutSearch {
     }
 
     /** Average height of 9 spots (corners, edge middles, centre): a cheap first guess. */
-    private static int quickY(WorldGen w, BoundingBox b) {
+    static int quickY(WorldGen w, BoundingBox b) {
         int sum = 0;
         int[] xs = {b.minX(), (b.minX() + b.maxX()) / 2, b.maxX()}, zs = {b.minZ(), (b.minZ() + b.maxZ()) / 2, b.maxZ()};
         for (int x : xs) for (int z : zs) sum += w.generator.getBaseHeight(x, z, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, w.heights, w.random);
