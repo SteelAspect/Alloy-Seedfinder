@@ -248,14 +248,14 @@ public final class QuadHunt {
     }
 
     /** A low witch hut in one top-bit version of a structure seed: the full seed, its box corner and floor height. */
-    public record LowHut(long seed, int x, int y, int z) {}
+    public record LowHut(long seed, int x, int y, int z, boolean quadMonument) {}
 
     /**
      * Low witch huts near 0,0 in every top-bit version of a structure seed where the quad monument at 0,0 still
      * generates. Hut positions are the same in every version; their height (the ground under them, caves carved)
      * isn't. Sorted lowest first.
      */
-    public static List<LowHut> lowHuts(long structureSeed, int radius, int maxY, Progress progress) {
+    public static List<LowHut> lowHuts(long structureSeed, int radius, int maxY, boolean needMonument, Progress progress) {
         WorldGen any = WorldGen.of(0, Dim.OVERWORLD, WorldType.NORMAL);
         RandomSpreadStructurePlacement monP = Structures.placement(any, BuiltinStructureSets.OCEAN_MONUMENTS);
         RandomSpreadStructurePlacement hutP = Structures.placement(any, BuiltinStructureSets.SWAMP_HUTS);
@@ -276,8 +276,11 @@ public final class QuadHunt {
             long seed = ((long) top << 48) | s48;
             List<LowHut> low = new ArrayList<>();
             WorldGen w = WorldGen.once(seed, Dim.OVERWORLD, WorldType.NORMAL);
-            boolean monuments = true;
-            for (int[] c : mons) if (monuments && Structures.start(w, monS, new ChunkPos(c[0], c[1]), true) == null) monuments = false;
+            java.util.function.BooleanSupplier quad = () -> {
+                for (int[] c : mons) if (Structures.start(w, monS, new ChunkPos(c[0], c[1]), true) == null) return false;
+                return true;
+            };
+            boolean monuments = !needMonument || quad.getAsBoolean();
             if (monuments) kept.incrementAndGet();
             if (monuments)
                 for (ChunkPos c : huts) {
@@ -286,13 +289,13 @@ public final class QuadHunt {
                     net.minecraft.world.level.levelgen.structure.BoundingBox b = st.getPieces().get(0).getBoundingBox();
                     if (HutSearch.quickY(w, b) > maxY + 60) continue;
                     int y = HutSearch.exactY(w, b);
-                    if (y <= maxY) low.add(new LowHut(seed, b.minX(), y, b.minZ()));
+                    if (y <= maxY) low.add(new LowHut(seed, b.minX(), y, b.minZ(), needMonument || quad.getAsBoolean()));
                 }
             int d = done.incrementAndGet();
             if (d % 2048 == 0) progress.update(d / 65536.0, "Top-bit versions");
             return low;
         }).flatMap(List::stream).sorted(java.util.Comparator.comparingInt(LowHut::y)).toList();
-        progress.update(1, out.size() + " low huts in the " + kept.get() + " versions that keep the quad monument (" + huts.size() + " hut spots in range)");
+        progress.update(1, out.size() + " low huts in " + kept.get() + " versions (" + huts.size() + " hut spots in range)");
         return out;
     }
 }

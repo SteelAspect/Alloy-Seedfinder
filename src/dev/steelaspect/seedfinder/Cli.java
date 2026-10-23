@@ -56,7 +56,7 @@ final class Cli {
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
               seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
-              seedfinder lowhuts <seed> [--radius 10000] [--max-y -30]                low huts near 0,0 in all 65,536 top-bit versions (quad monument kept)
+              seedfinder lowhuts <seed> [--radius 10000] [--max-y -50] [--any]        low huts near 0,0 in all 65,536 top-bit versions (--any: quad monument not needed)
               seedfinder fortresses <seed> [--crossroads [--max-y 60]]                most floor, or biggest joined crossroads (lines, corners, squares)
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
@@ -97,7 +97,7 @@ final class Cli {
             String a = args[i];
             if (a.equals("--large-biomes")) seed.type = WorldType.LARGE_BIOMES;
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
-            else if (a.equals("--nether") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
+            else if (a.equals("--nether") || a.equals("--any") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
             else if (a.equals("--cpu")) cpuOnly = true;
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
@@ -129,13 +129,21 @@ final class Cli {
         }
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
         if (mode.equals("lowhuts")) {
-            int maxY = Integer.parseInt(opt.getOrDefault("--max-y", "-30"));
-            List<QuadHunt.LowHut> huts = QuadHunt.lowHuts(seed.value(), area.radius(), maxY, progress());
+            int maxY = Integer.parseInt(opt.getOrDefault("--max-y", "-50"));
+            boolean any = opt.containsKey("--any");
+            List<QuadHunt.LowHut> huts = QuadHunt.lowHuts(seed.value(), area.radius(), maxY, !any, progress());
             OUT.println();
-            for (QuadHunt.LowHut h : huts.subList(0, Math.min(top, huts.size())))
-                OUT.printf("  seed %d  hut %d, %d, %d (floor y %d, %d from 0,0)%n", h.seed(), h.x(), h.y(), h.z(), h.y() + 1,
-                        Math.round(Math.hypot(h.x(), h.z())));
-            OUT.println(huts.size() + " huts at or below y " + maxY + " within " + area.radius() + " of 0,0 (quad monument at 0,0 kept)");
+            // Grouped by seed: most low huts first, then the lowest.
+            Map<Long, List<QuadHunt.LowHut>> bySeed = new java.util.LinkedHashMap<>();
+            for (QuadHunt.LowHut h : huts) bySeed.computeIfAbsent(h.seed(), k -> new ArrayList<>()).add(h);
+            List<List<QuadHunt.LowHut>> groups = new ArrayList<>(bySeed.values());
+            groups.sort((a, b) -> a.size() != b.size() ? b.size() - a.size() : Integer.compare(a.get(0).y(), b.get(0).y()));
+            for (List<QuadHunt.LowHut> g : groups.subList(0, Math.min(top, groups.size()))) {
+                OUT.printf("  seed %d: %d low hut%s%s%n", g.get(0).seed(), g.size(), g.size() == 1 ? "" : "s", g.get(0).quadMonument() ? " + quad monument at 0,0" : "");
+                for (QuadHunt.LowHut h : g)
+                    OUT.printf("      /tp %d %d %d  (floor y %d, %d from 0,0)%n", h.x() + 3, h.y() + 2, h.z() + 3, h.y() + 1, Math.round(Math.hypot(h.x(), h.z())));
+            }
+            OUT.println(huts.size() + " huts at or below y " + maxY + " within " + area.radius() + " of 0,0" + (any ? "" : " (quad monument at 0,0 kept)"));
             return 0;
         }
         if (mode.equals("quadseeds")) {
