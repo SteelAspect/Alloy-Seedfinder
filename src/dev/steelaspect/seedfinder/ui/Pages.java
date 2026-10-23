@@ -427,11 +427,16 @@ final class Pages {
 
     static final class Fortresses extends SearchPage {
         Fortresses(SeedFinderApp app) {
-            super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area, with the best wither skeleton farm AFK spot. About 3 min per 1M × 1M.");
+            super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area with the best wither skeleton farm AFK spot, or the biggest groups of joined crossroads. About 3 min per 1M × 1M.");
         }
+
+        private static final String[] RANKS = {"Floor area", "Joined crossroads"};
 
         @Override
         protected void buildForm(JPanel form) {
+            combo(form, "rank", "Rank by", RANKS, 170).setToolTipText("<html><b>Joined crossroads</b>: 4-way bridge crossings side by side at the same height"
+                    + "<br>(double, triple line or corner, quad line or square, quint), like Gaider10's CrossroadFinder.</html>");
+            text(form, "maxY", "Crossroads at or below y", "255", 100);
             areaFields(form, "100k × 100k");
             text(form, "minDist", "At least this far out", "0", 150);
         }
@@ -443,7 +448,39 @@ final class Pages {
 
         @Override
         protected List<Result> run(Settings.Seed seed, Progress progress) {
-            return FortressSearch.run(new FortressSearch.Params(area(seed), number("minDist", "the distance"), 50), progress);
+            return FortressSearch.run(new FortressSearch.Params(area(seed), number("minDist", "the distance"), 50,
+                    value("rank").equals(RANKS[1]), number("maxY", "the height")), progress);
+        }
+    }
+
+    // ------------------------------------------------------------------ nether roof
+
+    static final class Roof extends SearchPage {
+        Roof(SeedFinderApp app) {
+            super(app, "roof", "Nether roof", "Bedrock patterns in the nether roof (y 123 to 126), like nether9: the default is a wither cage. Nearest first.");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            text(form, "pattern", "Pattern", dev.steelaspect.seedfinder.engine.RoofSearch.WITHER_CAGE, 420).setToolTipText("<html>Layers y 123, 124, 125, 126 separated by <b>/</b>;"
+                    + " each 5 rows (north first) of 5 blocks (west first), separated by commas.<br><b>#</b> bedrock, <b>.</b> no bedrock, <b>?</b> anything."
+                    + "<br>The default is nether9's wither cage: open at y 123, a full 3 x 3 at y 124, a ring of 8 at y 125.</html>");
+            areaFields(form, "20k × 20k");
+        }
+
+        @Override
+        protected Dim dim() {
+            return Dim.NETHER;
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) {
+            try {
+                dev.steelaspect.seedfinder.engine.RoofSearch.parse(value("pattern"));
+            } catch (IllegalArgumentException e) {
+                throw new BadInput(e.getMessage());
+            }
+            return dev.steelaspect.seedfinder.engine.RoofSearch.run(new dev.steelaspect.seedfinder.engine.RoofSearch.Params(area(seed), value("pattern"), 50), progress);
         }
     }
 }

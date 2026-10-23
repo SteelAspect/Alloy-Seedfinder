@@ -231,6 +231,15 @@ public final class Verifier {
                     out.add(new Check(nextId++, i, 1, r.dim, r.ref[2], r.ref[4], true, in + "if entity @e[type=minecraft:item_frame,x=" + r.ref[2]
                             + ",y=" + r.ref[3] + ",z=" + r.ref[4] + ",dx=0,dy=0,dz=0,nbt={Item:{id:\"minecraft:elytra\"}}] run say SFV P %ID%", null));
             }
+            case ROOF -> {
+                // Every block the pattern cares about: bedrock or not, as in the pattern.
+                for (int p = 2; p < r.ref.length; p++) {
+                    int cell = r.ref[p] >> 1, c = cell % 5, row = cell / 5 % 5, layer = cell / 25;
+                    int x = r.ref[0] + c - 2, y = 123 + layer, z = r.ref[1] + row - 2;
+                    out.add(new Check(nextId++, i, p, Dim.NETHER, x, z, true, in + ((r.ref[p] & 1) == 1 ? "if" : "unless") + " block " + x + " " + y + " " + z
+                            + " minecraft:bedrock run say SFV P %ID%", null));
+                }
+            }
             case FORTRESS -> out.add(new Check(nextId++, i, 0, Dim.NETHER, r.ref[0], r.ref[1], false,
                     in + "positioned " + r.ref[0] + " 64 " + r.ref[1] + " run locate structure minecraft:fortress", r.ref[0] + "," + r.ref[1]));
         }

@@ -58,6 +58,28 @@ is worked out like the game does (average ground under it), on the chunk's terra
 (`CarvedGround`: the game's own noise fill and carver loop for that chunk). Whole world triple/quad huts: about
 2.5 minutes. Block and fluid tags are read from the game jar too (carvers need them).
 
+Low witch huts: checked against [LowYSwampHut](https://github.com/M33Galaxy/LowYSwampHut) (MIT): on the SMP seed,
+1M x 1M, both find the one hut at or below y -40 (-15792, -54, -17168). Its fast pre-filter is an approximation, so
+the finder keeps its own exact path.
+
+Quad seeds (`quadseeds`, graphics card): seeds with a quad monument at 0,0 and a quad witch hut within a range (default
+30k). Structure positions only use the low 48 bits, and moving a quad to another region corner is the same as adding a
+constant to the seed, so the card tries every structure seed for 4 monuments within 16 chunks of each other around
+0,0 (about 2.3e10 seeds/s on an RX 9070, checked against the game's placement code at start). The CPU keeps those
+with one AFK spot within 128 of all 4 middles, looks for quad huts nearby, then tries all 65,536 top-bit versions with
+the game's own structure generation (all 4 huts in a swamp, all 4 monuments really generating). About 1 in 10 billion
+structure seeds has a quad monument; about 1 in 1,500 of those has a quad hut within 30k.
+
+Joined crossroads (Fortresses, "Rank by joined crossroads", `fortresses --crossroads [--max-y]`): the idea of
+Gaider10's [CrossroadFinder](https://github.com/Gaider10/CrossroadFinder) (web version by Mews): 4-way bridge crossings
+(19 x 19, the start piece is one too) side by side at the same height, as double, triple line/corner, quad line/square
+or quint. Same results as CrossroadFinder on the seeds compared (quint line and quad squares).
+
+Nether roof (`roof`): bedrock patterns in the roof, y 123 to 126, from [nether9](https://github.com/spadix0/nether9)
+by spadix0 (MIT-0); the default is its wither cage. The bedrock is the game's own rule (`bedrock_roof` positional
+random and gradient). Same 4 spots as nether9 on its README seed within 420 blocks. Only the low 48 bits of the seed
+matter (the nether uses the legacy random).
+
 Slime farms (Slime chunks and Slime seeds), ported from kyoubitt's slime toolchain (github.com/kyoubitt/slime,
 used with permission). A farm is one floor of slime-chunk blocks at y -64; a block counts when its slime would stand
 more than 24 and at most 128 blocks from your feet. cq = counted blocks / 256, standing level with the floor (the

@@ -44,7 +44,7 @@ import java.util.Map;
 /** The main window: top bar with the seed, sidebar with the tools, and the current page. */
 public final class SeedFinderApp {
     public static final String NAME = "Alloy Seed Finder";
-    public static final String VERSION = "2.4.0";
+    public static final String VERSION = "2.5.0";
 
     private final Settings settings = Settings.load();
     private final JFrame frame = new JFrame(NAME);
@@ -83,7 +83,7 @@ public final class SeedFinderApp {
         mapPage = new MapPage(this);
         add("map", mapPage);
         for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this), new Pages.SlimeSeeds(this), new Pages.Nearest(this),
-                new Pages.Nether(this), new Pages.Fortresses(this))) {
+                new Pages.Nether(this), new Pages.Fortresses(this), new Pages.Roof(this))) {
             p.build();
             searchPages.add(p);
             add(p.id, p);

@@ -11,7 +11,9 @@ import dev.steelaspect.seedfinder.engine.Slime;
 import dev.steelaspect.seedfinder.engine.SlimeHunt;
 import dev.steelaspect.seedfinder.engine.SlimeSearch;
 import dev.steelaspect.seedfinder.engine.Progress;
+import dev.steelaspect.seedfinder.engine.QuadHunt;
 import dev.steelaspect.seedfinder.engine.Result;
+import dev.steelaspect.seedfinder.engine.RoofSearch;
 import dev.steelaspect.seedfinder.engine.Search;
 import dev.steelaspect.seedfinder.engine.SolidSearch;
 import dev.steelaspect.seedfinder.engine.WorldType;
@@ -52,7 +54,9 @@ final class Cli {
               seedfinder slimerig <seed> --center x,z [--stand level|y39]              in-game test rig commands for a farm (Carpet + WorldEdit)
               seedfinder slimepicture <seed> --center x,z --out farm.png               picture of a farm's 17x17 chunks
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
-              seedfinder fortresses <seed> [--min-dist 0]                              biggest nether fortresses
+              seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
+              seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
+              seedfinder fortresses <seed> [--crossroads [--max-y 60]]                most floor, or biggest joined crossroads (lines, corners, squares)
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
                              --top n (default 25)  --min-size blocks (biomes)  --large-biomes / --amplified
@@ -75,7 +79,7 @@ final class Cli {
         if (args[0].matches("-?\\d+")) mode = "biomes"; // old style: just a seed
         else args = Arrays.copyOfRange(args, 1, args.length);
         // The slime seed hunt has no seed to start from.
-        if (mode.equals("slimeseeds") && (args.length == 0 || args[0].startsWith("--"))) {
+        if ((mode.equals("slimeseeds") || mode.equals("quadseeds")) && (args.length == 0 || args[0].startsWith("--"))) {
             String[] with = new String[args.length + 1];
             with[0] = "0";
             System.arraycopy(args, 0, with, 1, args.length);
@@ -92,7 +96,7 @@ final class Cli {
             String a = args[i];
             if (a.equals("--large-biomes")) seed.type = WorldType.LARGE_BIOMES;
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
-            else if (a.equals("--nether") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
+            else if (a.equals("--nether") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
             else if (a.equals("--cpu")) cpuOnly = true;
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
@@ -123,6 +127,13 @@ final class Cli {
             return 0;
         }
         OUT.println("Loading the Minecraft 1.21.11 world generator...");
+        if (mode.equals("quadseeds")) {
+            List<Long> seeds = QuadHunt.run(new QuadHunt.Params(Long.parseLong(opt.getOrDefault("--from", "0")),
+                    Long.parseLong(opt.getOrDefault("--count", "281474976710656")), Integer.parseInt(opt.getOrDefault("--hut-range", "30000")),
+                    Integer.parseInt(opt.getOrDefault("--seeds", "1")), OUT), Progress.NONE);
+            OUT.println("Seeds: " + seeds);
+            return 0;
+        }
         Progress p = progress();
         long start = System.nanoTime();
         String m = mode;
@@ -146,7 +157,9 @@ final class Cli {
             case "nearest" -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type,
                     NearestSearch.Target.valueOf(opt.getOrDefault("--type", "VILLAGE").toUpperCase(Locale.ROOT)), area.centerX(), area.centerZ(),
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);
-            case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top), p);
+            case "roof" -> RoofSearch.run(new RoofSearch.Params(area, opt.getOrDefault("--pattern", RoofSearch.WITHER_CAGE), top), p);
+            case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top,
+                    opt.containsKey("--crossroads"), Integer.parseInt(opt.getOrDefault("--max-y", "255"))), p);
             default -> {
                 System.err.println("Unknown command " + m);
                 yield null;

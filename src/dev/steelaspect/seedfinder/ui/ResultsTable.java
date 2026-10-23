@@ -147,7 +147,7 @@ public final class ResultsTable extends JTable {
         private String sizeName() {
             if (rows.isEmpty()) return "Size";
             return switch (rows.get(0).kind) {
-                case STRUCTURE -> "Distance";
+                case STRUCTURE, ROOF -> "Distance";
                 case MONUMENTS, HUTS, SLIME -> "Spawn blocks";
                 case FORTRESS -> "Floor area";
                 default -> "Size";

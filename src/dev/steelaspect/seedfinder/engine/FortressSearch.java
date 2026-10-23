@@ -20,6 +20,7 @@ import net.minecraft.world.level.levelgen.structure.BuiltinStructureSets;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
+import net.minecraft.world.level.levelgen.structure.structures.NetherFortressPieces;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
@@ -62,10 +63,23 @@ public final class FortressSearch {
         }
     }
 
-    /** @param minDist only fortresses at least this far out on x or z */
-    public record Params(Search area, int minDist, int top) {}
+    /**
+     * @param minDist      only fortresses at least this far out on x or z
+     * @param byCrossroads rank by the biggest group of joined crossroads (then lowest) instead of floor area
+     * @param maxY         only count crossroads at or below this height (their floor)
+     */
+    public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY) {
+        public Params(Search area, int minDist, int top) {
+            this(area, minDist, top, false, 255);
+        }
+    }
 
-    private record Fortress(int x, int z, long floor, BoundingBox box, List<BoundingBox> parts) {}
+    /** crossings: 4-way bridge crossroads, crossing rooms, small corridor crossings; group: the biggest joined crossroads. */
+    private record Fortress(int x, int z, long floor, BoundingBox box, List<BoundingBox> parts, int[] crossings, Group group) {
+        long rank(boolean byCrossroads) {
+            return byCrossroads ? (long) group.size << 40 | (long) Group.score(group) << 38 | (long) (255 - group.y) << 30 | floor : floor;
+        }
+    }
 
     private FortressSearch() {}
 
@@ -77,7 +91,7 @@ public final class FortressSearch {
         StructureTemplatePool starts = w.lookup.lookupOrThrow(Registries.TEMPLATE_POOL)
                 .getOrThrow(ResourceKey.create(Registries.TEMPLATE_POOL, Identifier.withDefaultNamespace("bastion/starts"))).value();
         int[] r = Structures.regions(p.area(), placement.spacing());
-        PriorityQueue<Fortress> best = new PriorityQueue<>(Comparator.comparingLong(Fortress::floor));
+        PriorityQueue<Fortress> best = new PriorityQueue<>(Comparator.comparingLong(f -> f.rank(p.byCrossroads())));
         AtomicInteger count = new AtomicInteger();
         Structures.eachRow(r, progress, 0, 0.97, "Building fortresses", rx -> {
             for (int rz = r[2]; rz <= r[3]; rz++) {
@@ -102,16 +116,27 @@ public final class FortressSearch {
                     continue; // sticks out past the edge of the world
                 long area = 0;
                 List<BoundingBox> parts = new ArrayList<>();
+                int[] crossings = new int[4];
+                List<BoundingBox> roads = new ArrayList<>();
                 for (StructurePiece piece : pieceList) {
+                    BoundingBox pb = piece.getBoundingBox();
+                    if (piece instanceof NetherFortressPieces.BridgeCrossing) {
+                        crossings[0]++;
+                        if (pb.minY() <= p.maxY()) roads.add(pb);
+                    }
+                    else if (piece instanceof NetherFortressPieces.RoomCrossing) crossings[1]++;
+                    else if (piece instanceof NetherFortressPieces.CastleSmallCorridorCrossingPiece) crossings[2]++;
                     BoundingBox b = piece.getBoundingBox();
                     parts.add(b);
                     area += (long) b.getXSpan() * b.getZSpan();
                 }
+                Group group = Group.of(roads);
                 count.incrementAndGet();
                 synchronized (best) {
                     // Keep only the biggest few (with their pieces) so memory stays small.
-                    if (best.size() < KEEP || area > best.peek().floor) {
-                        best.add(new Fortress(x, z, area, all, parts));
+                    Fortress f = new Fortress(x, z, area, all, parts, crossings, group);
+                    if (best.size() < KEEP || f.rank(p.byCrossroads()) > best.peek().rank(p.byCrossroads())) {
+                        best.add(f);
                         if (best.size() > KEEP) best.poll();
                     }
                 }
@@ -146,6 +171,8 @@ public final class FortressSearch {
             res.details.put("Box", b.getXSpan() + "x" + b.getZSpan());
             res.details.put("Height", b.getYSpan() + " (y " + b.minY() + " to " + b.maxY() + ")");
             res.details.put("Volume", Fmt.n(unionVolume(f.parts, b)));
+            res.details.put("Crossroads", f.crossings[0] + " (" + f.crossings[1] + " crossing rooms, " + f.crossings[2] + " corridor crossings)");
+            if (f.group.size > 1) res.details.put("Joined crossroads", f.group.label() + " at y " + f.group.y + ", corner " + f.group.x + ", " + f.group.z);
             MonumentSearch.Spot s = afk.get(f);
             if (s != null) {
                 res.details.put("Farm AFK spot", s.x() + ", " + s.y() + ", " + s.z());
@@ -155,10 +182,82 @@ public final class FortressSearch {
             res.ref = new int[]{f.x, f.z};
             out.add(res);
         }
-        out.sort((a, c) -> Double.compare(c.value, a.value));
+        if (p.byCrossroads()) {
+            List<Fortress> order = new ArrayList<>(best);
+            order.sort(Comparator.comparingLong((Fortress f) -> f.rank(true)).reversed());
+            List<Result> sorted = new ArrayList<>();
+            for (Fortress f : order) for (Result res : out) if (res.ref[0] == f.x && res.ref[1] == f.z) sorted.add(res);
+            out = sorted;
+        } else out.sort((a, c) -> Double.compare(c.value, a.value));
         if (out.size() > p.top()) out = new ArrayList<>(out.subList(0, p.top()));
         progress.update(1, Fmt.n(count.get()) + " fortresses in the area");
         return out;
+    }
+
+    /**
+     * The biggest group of crossroads (19 x 19 bridge crossings) joined side by side at the same height, like
+     * Gaider10's CrossroadFinder shapes: 2 = double, 3 = triple line or corner, 4 = quad line, square or other, 5 = quint.
+     * x, z, y: the north-west crossroad's corner and floor height.
+     */
+    record Group(int size, String shape, int x, int y, int z) {
+        static final Group NONE = new Group(0, "", 0, 0, 0);
+
+        String label() {
+            return switch (size) {
+                case 2 -> "double";
+                case 3 -> "triple " + shape;
+                case 4 -> "quad " + shape;
+                case 5 -> "quint " + shape;
+                default -> size + " " + shape;
+            };
+        }
+
+        static Group of(List<BoundingBox> roads) {
+            Group best = NONE;
+            int n = roads.size();
+            boolean[] seen = new boolean[n];
+            for (int i = 0; i < n; i++) {
+                if (seen[i]) continue;
+                List<BoundingBox> g = new ArrayList<>();
+                java.util.ArrayDeque<Integer> todo = new java.util.ArrayDeque<>(List.of(i));
+                seen[i] = true;
+                while (!todo.isEmpty()) {
+                    BoundingBox a = roads.get(todo.poll());
+                    g.add(a);
+                    for (int j = 0; j < n; j++) {
+                        BoundingBox b = roads.get(j);
+                        if (seen[j] || b.minY() != a.minY()) continue;
+                        int dx = Math.abs(b.minX() - a.minX()), dz = Math.abs(b.minZ() - a.minZ());
+                        if (dx == 19 && dz == 0 || dx == 0 && dz == 19) {
+                            seen[j] = true;
+                            todo.add(j);
+                        }
+                    }
+                }
+                int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+                for (BoundingBox b : g) {
+                    minX = Math.min(minX, b.minX());
+                    maxX = Math.max(maxX, b.minX());
+                    minZ = Math.min(minZ, b.minZ());
+                    maxZ = Math.max(maxZ, b.minZ());
+                }
+                int w = (maxX - minX) / 19 + 1, d = (maxZ - minZ) / 19 + 1;
+                String shape = w == 1 || d == 1 ? "line" : g.size() == 3 ? "corner" : g.size() == 4 && w == 2 && d == 2 ? "square" : "blob";
+                int y = g.get(0).minY();
+                Group cand = new Group(g.size(), shape, minX, y, minZ);
+                if (cand.size > best.size || cand.size == best.size && (score(cand) > score(best) || score(cand) == score(best) && y < best.y)) best = cand;
+            }
+            return best;
+        }
+
+        /** Squares beat lines beat corners/blobs of the same size. */
+        static int score(Group g) {
+            return switch (g.shape) {
+                case "square" -> 3;
+                case "line" -> 2;
+                default -> 1;
+            };
+        }
     }
 
     /**
