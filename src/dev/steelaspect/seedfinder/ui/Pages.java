@@ -430,7 +430,7 @@ final class Pages {
             super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area with the best wither skeleton farm AFK spot, or the biggest groups of joined crossroads. About 3 min per 1M × 1M.");
         }
 
-        private static final String[] RANKS = {"Floor area", "Joined crossroads"};
+        private static final String[] RANKS = {"Floor area", "Joined crossroads", "Straight crossroad lines"};
 
         @Override
         protected void buildForm(JPanel form) {
@@ -449,7 +449,7 @@ final class Pages {
         @Override
         protected List<Result> run(Settings.Seed seed, Progress progress) {
             return FortressSearch.run(new FortressSearch.Params(area(seed), number("minDist", "the distance"), 50,
-                    value("rank").equals(RANKS[1]), number("maxY", "the height")), progress);
+                    !value("rank").equals(RANKS[0]), number("maxY", "the height"), value("rank").equals(RANKS[2])), progress);
         }
     }
 

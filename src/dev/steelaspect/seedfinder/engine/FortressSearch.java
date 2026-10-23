@@ -67,17 +67,24 @@ public final class FortressSearch {
      * @param minDist      only fortresses at least this far out on x or z
      * @param byCrossroads rank by the biggest group of joined crossroads (then lowest) instead of floor area
      * @param maxY         only count crossroads at or below this height (their floor)
+     * @param lines        with byCrossroads: rank by the longest straight line of joined crossroads instead
      */
-    public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY) {
+    public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines) {
+        public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY) {
+            this(area, minDist, top, byCrossroads, maxY, false);
+        }
+
         public Params(Search area, int minDist, int top) {
-            this(area, minDist, top, false, 255);
+            this(area, minDist, top, false, 255, false);
         }
     }
 
     /** crossings: 4-way bridge crossroads, crossing rooms, small corridor crossings; group: the biggest joined crossroads. */
-    private record Fortress(int x, int z, long floor, BoundingBox box, List<BoundingBox> parts, int[] crossings, Group group) {
-        long rank(boolean byCrossroads) {
-            return byCrossroads ? (long) group.size << 40 | (long) Group.score(group) << 38 | (long) (255 - group.y) << 30 | floor : floor;
+    private record Fortress(int x, int z, long floor, BoundingBox box, List<BoundingBox> parts, int[] crossings, Group group, Group line) {
+        long rank(Params p) {
+            if (!p.byCrossroads()) return floor;
+            if (p.lines()) return (long) line.size << 40 | (long) (255 - line.y) << 30 | floor;
+            return (long) group.size << 40 | (long) Group.score(group) << 38 | (long) (255 - group.y) << 30 | floor;
         }
     }
 
@@ -91,7 +98,7 @@ public final class FortressSearch {
         StructureTemplatePool starts = w.lookup.lookupOrThrow(Registries.TEMPLATE_POOL)
                 .getOrThrow(ResourceKey.create(Registries.TEMPLATE_POOL, Identifier.withDefaultNamespace("bastion/starts"))).value();
         int[] r = Structures.regions(p.area(), placement.spacing());
-        PriorityQueue<Fortress> best = new PriorityQueue<>(Comparator.comparingLong(f -> f.rank(p.byCrossroads())));
+        PriorityQueue<Fortress> best = new PriorityQueue<>(Comparator.comparingLong(f -> f.rank(p)));
         AtomicInteger count = new AtomicInteger();
         Structures.eachRow(r, progress, 0, 0.97, "Building fortresses", rx -> {
             for (int rz = r[2]; rz <= r[3]; rz++) {
@@ -130,12 +137,12 @@ public final class FortressSearch {
                     parts.add(b);
                     area += (long) b.getXSpan() * b.getZSpan();
                 }
-                Group group = Group.of(roads);
+                Group group = Group.of(roads), line = Group.line(roads);
                 count.incrementAndGet();
                 synchronized (best) {
                     // Keep only the biggest few (with their pieces) so memory stays small.
-                    Fortress f = new Fortress(x, z, area, all, parts, crossings, group);
-                    if (best.size() < KEEP || f.rank(p.byCrossroads()) > best.peek().rank(p.byCrossroads())) {
+                    Fortress f = new Fortress(x, z, area, all, parts, crossings, group, line);
+                    if (best.size() < KEEP || f.rank(p) > best.peek().rank(p)) {
                         best.add(f);
                         if (best.size() > KEEP) best.poll();
                     }
@@ -173,6 +180,7 @@ public final class FortressSearch {
             res.details.put("Volume", Fmt.n(unionVolume(f.parts, b)));
             res.details.put("Crossroads", f.crossings[0] + " (" + f.crossings[1] + " crossing rooms, " + f.crossings[2] + " corridor crossings)");
             if (f.group.size > 1) res.details.put("Joined crossroads", f.group.label() + " at y " + f.group.y + ", corner " + f.group.x + ", " + f.group.z);
+            if (f.line.size > 1) res.details.put("Straight line", f.line.size + " " + f.line.shape + " at y " + f.line.y + ", stand " + (f.line.x + 9) + " " + (f.line.y + 5) + " " + (f.line.z + 9));
             MonumentSearch.Spot s = afk.get(f);
             if (s != null) {
                 res.details.put("Farm AFK spot", s.x() + ", " + s.y() + ", " + s.z());
@@ -184,7 +192,7 @@ public final class FortressSearch {
         }
         if (p.byCrossroads()) {
             List<Fortress> order = new ArrayList<>(best);
-            order.sort(Comparator.comparingLong((Fortress f) -> f.rank(true)).reversed());
+            order.sort(Comparator.comparingLong((Fortress f) -> f.rank(p)).reversed());
             List<Result> sorted = new ArrayList<>();
             for (Fortress f : order) for (Result res : out) if (res.ref[0] == f.x && res.ref[1] == f.z) sorted.add(res);
             out = sorted;
@@ -210,6 +218,23 @@ public final class FortressSearch {
                 case 5 -> "quint " + shape;
                 default -> size + " " + shape;
             };
+        }
+
+        /** The longest straight run of crossroads side by side at the same height; x, z: the first one's corner. */
+        static Group line(List<BoundingBox> roads) {
+            Group best = NONE;
+            java.util.Set<String> at = new java.util.HashSet<>();
+            for (BoundingBox b : roads) at.add(b.minX() + "," + b.minY() + "," + b.minZ());
+            for (BoundingBox b : roads)
+                for (int axis = 0; axis < 2; axis++) {
+                    int dx = axis == 0 ? 19 : 0, dz = axis == 0 ? 0 : 19;
+                    if (at.contains((b.minX() - dx) + "," + b.minY() + "," + (b.minZ() - dz))) continue; // not the start of a run
+                    int n = 1;
+                    while (at.contains((b.minX() + n * dx) + "," + b.minY() + "," + (b.minZ() + n * dz))) n++;
+                    Group g = new Group(n, axis == 0 ? "east-west" : "north-south", b.minX(), b.minY(), b.minZ());
+                    if (n > best.size || n == best.size && b.minY() < best.y) best = g;
+                }
+            return best;
         }
 
         static Group of(List<BoundingBox> roads) {

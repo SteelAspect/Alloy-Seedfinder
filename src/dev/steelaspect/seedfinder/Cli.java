@@ -57,7 +57,7 @@ final class Cli {
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
               seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
               seedfinder lowhuts <seed> [--radius 10000] [--max-y -50] [--any]        low huts near 0,0 in all 65,536 top-bit versions (--any: quad monument not needed)
-              seedfinder fortresses <seed> [--crossroads [--max-y 60]]                most floor, or biggest joined crossroads (lines, corners, squares)
+              seedfinder fortresses <seed> [--crossroads|--lines [--max-y 60]]        most floor, biggest joined crossroads, or longest straight line
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
                              --top n (default 25)  --min-size blocks (biomes)  --large-biomes / --amplified
@@ -97,7 +97,7 @@ final class Cli {
             String a = args[i];
             if (a.equals("--large-biomes")) seed.type = WorldType.LARGE_BIOMES;
             else if (a.equals("--amplified")) seed.type = WorldType.AMPLIFIED;
-            else if (a.equals("--nether") || a.equals("--any") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
+            else if (a.equals("--nether") || a.equals("--any") || a.equals("--lines") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
             else if (a.equals("--cpu")) cpuOnly = true;
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
@@ -178,7 +178,7 @@ final class Cli {
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);
             case "roof" -> RoofSearch.run(new RoofSearch.Params(area, opt.getOrDefault("--pattern", RoofSearch.WITHER_CAGE), top), p);
             case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top,
-                    opt.containsKey("--crossroads"), Integer.parseInt(opt.getOrDefault("--max-y", "255"))), p);
+                    opt.containsKey("--crossroads") || opt.containsKey("--lines"), Integer.parseInt(opt.getOrDefault("--max-y", "255")), opt.containsKey("--lines")), p);
             default -> {
                 System.err.println("Unknown command " + m);
                 yield null;
