@@ -57,7 +57,7 @@ final class Cli {
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
               seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
               seedfinder lowhuts <seed> [--radius 10000] [--max-y -50] [--any]        low huts near 0,0 in all 65,536 top-bit versions (--any: quad monument not needed)
-              seedfinder fortresses <seed> [--crossroads|--lines [--max-y 60]]        most floor, biggest joined crossroads, or longest straight line
+              seedfinder fortresses <seed> [--crossroads|--lines [--max-y 60] [--biome soul_sand_valley --biome-y 48-93]]  most floor, joined crossroads, straight lines
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
                              --top n (default 25)  --min-size blocks (biomes)  --large-biomes / --amplified
@@ -178,7 +178,8 @@ final class Cli {
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);
             case "roof" -> RoofSearch.run(new RoofSearch.Params(area, opt.getOrDefault("--pattern", RoofSearch.WITHER_CAGE), top), p);
             case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top,
-                    opt.containsKey("--crossroads") || opt.containsKey("--lines"), Integer.parseInt(opt.getOrDefault("--max-y", "255")), opt.containsKey("--lines")), p);
+                    opt.containsKey("--crossroads") || opt.containsKey("--lines"), Integer.parseInt(opt.getOrDefault("--max-y", "255")), opt.containsKey("--lines"),
+                    opt.get("--biome"), Integer.parseInt(opt.getOrDefault("--biome-y", "48-93").split("-")[0]), Integer.parseInt(opt.getOrDefault("--biome-y", "48-93").split("-")[1])), p);
             default -> {
                 System.err.println("Unknown command " + m);
                 yield null;

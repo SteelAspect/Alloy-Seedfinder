@@ -68,8 +68,15 @@ public final class FortressSearch {
      * @param byCrossroads rank by the biggest group of joined crossroads (then lowest) instead of floor area
      * @param maxY         only count crossroads at or below this height (their floor)
      * @param lines        with byCrossroads: rank by the longest straight line of joined crossroads instead
+     * @param biome        with byCrossroads: only keep fortresses whose ranked crossroads are all in this biome
+     *                     (every 4 blocks across them) at every height from biomeFrom to biomeTo; null for any
      */
-    public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines) {
+    public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines,
+                         String biome, int biomeFrom, int biomeTo) {
+        public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines) {
+            this(area, minDist, top, byCrossroads, maxY, lines, null, 0, 0);
+        }
+
         public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY) {
             this(area, minDist, top, byCrossroads, maxY, false);
         }
@@ -138,6 +145,10 @@ public final class FortressSearch {
                     area += (long) b.getXSpan() * b.getZSpan();
                 }
                 Group group = Group.of(roads), line = Group.line(roads);
+                if (p.biome() != null && p.byCrossroads()) {
+                    Group ranked = p.lines() ? line : group;
+                    if (ranked.size < 2 || !inBiome(w, ranked.boxes, p.biome(), p.biomeFrom(), p.biomeTo())) continue;
+                }
                 count.incrementAndGet();
                 synchronized (best) {
                     // Keep only the biggest few (with their pieces) so memory stays small.
@@ -207,8 +218,25 @@ public final class FortressSearch {
      * Gaider10's CrossroadFinder shapes: 2 = double, 3 = triple line or corner, 4 = quad line, square or other, 5 = quint.
      * x, z, y: the north-west crossroad's corner and floor height.
      */
-    record Group(int size, String shape, int x, int y, int z) {
-        static final Group NONE = new Group(0, "", 0, 0, 0);
+    /** True if the biome is the same everywhere in these boxes (sideways), every 4 blocks, at every height from y0 to y1. */
+    private static boolean inBiome(WorldGen w, List<BoundingBox> boxes, String biome, int y0, int y1) {
+        for (BoundingBox b : boxes)
+            for (int y = y0; ; y = Math.min(y + 4, y1)) {
+                for (int x = b.minX(); ; x = Math.min(x + 4, b.maxX())) {
+                    for (int z = b.minZ(); ; z = Math.min(z + 4, b.maxZ())) {
+                        if (!w.name(w.biome(x, y, z)).equals(biome)) return false;
+                        if (z == b.maxZ()) break;
+                    }
+                    if (x == b.maxX()) break;
+                }
+                if (y == y1) break;
+            }
+        return true;
+    }
+
+    /** boxes: the crossroads in the group. */
+    record Group(int size, String shape, int x, int y, int z, List<BoundingBox> boxes) {
+        static final Group NONE = new Group(0, "", 0, 0, 0, List.of());
 
         String label() {
             return switch (size) {
@@ -231,7 +259,10 @@ public final class FortressSearch {
                     if (at.contains((b.minX() - dx) + "," + b.minY() + "," + (b.minZ() - dz))) continue; // not the start of a run
                     int n = 1;
                     while (at.contains((b.minX() + n * dx) + "," + b.minY() + "," + (b.minZ() + n * dz))) n++;
-                    Group g = new Group(n, axis == 0 ? "east-west" : "north-south", b.minX(), b.minY(), b.minZ());
+                    List<BoundingBox> run = new ArrayList<>();
+                    for (int k = 0; k < n; k++)
+                        run.add(new BoundingBox(b.minX() + k * dx, b.minY(), b.minZ() + k * dz, b.maxX() + k * dx, b.maxY(), b.maxZ() + k * dz));
+                    Group g = new Group(n, axis == 0 ? "east-west" : "north-south", b.minX(), b.minY(), b.minZ(), run);
                     if (n > best.size || n == best.size && b.minY() < best.y) best = g;
                 }
             return best;
@@ -269,7 +300,7 @@ public final class FortressSearch {
                 int w = (maxX - minX) / 19 + 1, d = (maxZ - minZ) / 19 + 1;
                 String shape = w == 1 || d == 1 ? "line" : g.size() == 3 ? "corner" : g.size() == 4 && w == 2 && d == 2 ? "square" : "blob";
                 int y = g.get(0).minY();
-                Group cand = new Group(g.size(), shape, minX, y, minZ);
+                Group cand = new Group(g.size(), shape, minX, y, minZ, g);
                 if (cand.size > best.size || cand.size == best.size && (score(cand) > score(best) || score(cand) == score(best) && y < best.y)) best = cand;
             }
             return best;
