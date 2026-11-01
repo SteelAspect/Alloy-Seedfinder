@@ -270,15 +270,36 @@ public final class CudaFfm implements OpenCl {
             __device__ inline ulong cl_abs(long long x) { return x < 0 ? 0ull - (ulong) x : (ulong) x; }
             __device__ inline double cl_mix(double a, double b, double t) { return a + (b - a) * t; }
             __device__ inline float cl_mix(float a, float b, float t) { return a + (b - a) * t; }
-            #define long long long
             """;
+
+    /** Hex floating-point numbers (0x1.0p-2) are C++17: written out in decimal instead, the same value exactly. */
+    private static final java.util.regex.Pattern HEX_FLOAT = java.util.regex.Pattern.compile(
+            "\\b0[xX]([0-9a-fA-F]*\\.?[0-9a-fA-F]*)[pP]([+-]?[0-9]+)([fF]?)");
+
+    private static String decimalFloats(String src) {
+        java.util.regex.Matcher m = HEX_FLOAT.matcher(src);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String lit = "0x" + m.group(1) + "p" + m.group(2);
+            String dec;
+            if (m.group(3).isEmpty()) {
+                // Java prints the shortest decimal that reads back as exactly this double.
+                dec = Double.toString(Double.parseDouble(lit));
+            } else dec = Float.toString(Float.parseFloat(lit)) + "f";
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(dec));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
 
     /** OpenCL C (as the app writes it) to CUDA C. */
     public static String translate(String src) {
-        String s = src.replaceAll("(?m)^\\s*#pragma OPENCL.*$", "")
+        String s = decimalFloats(src).replaceAll("(?m)^\\s*#pragma OPENCL.*$", "")
                 .replaceAll("__attribute__\\(\\(reqd_work_group_size\\((\\d+)\\s*,\\s*1\\s*,\\s*1\\)\\)\\)", "__launch_bounds__($1)")
                 .replaceAll("\\(int2\\)\\s*\\(", "make_int2(")
-                // OpenCL's long is 64 bits everywhere; CUDA's long is 32 on Windows: number suffixes L/UL -> LL/ULL.
+                // OpenCL's long is 64 bits everywhere; CUDA's long is 32 on Windows: the type is written long long
+                .replaceAll("(?<!long )\\blong\\b(?! long)", "long long")
+                // and number suffixes L/UL become LL/ULL.
                 .replaceAll("\\b(0[xX][0-9a-fA-F]+|[0-9]+)([uU]?)[lL]\\b", "$1$2LL")
                 .replaceAll("\\bmin\\s*\\(", "cl_min(")
                 .replaceAll("\\bmax\\s*\\(", "cl_max(")
