@@ -42,12 +42,15 @@ public final class Boot {
         if (!setup.ready()) {
             if (cli || GraphicsEnvironment.isHeadless()) {
                 System.out.println("First run: getting Minecraft " + Setup.VERSION + " files from Mojang (about 70 MB, one time).");
-                int[] last = {-1};
+                int[] last = {-1, 0};
                 setup.run((text, f) -> {
                     int pct = (int) (f * 100);
                     if (pct != last[0]) {
                         last[0] = pct;
-                        System.out.print("\r  " + pct + "%  " + text + "          ");
+                        // Pad over the longest line so far, so a shorter message doesn't leave the end of the last one.
+                        String line = "  " + pct + "%  " + text;
+                        last[1] = Math.max(last[1], line.length());
+                        System.out.print("\r" + line + " ".repeat(last[1] - line.length()));
                     }
                 });
                 System.out.println();
