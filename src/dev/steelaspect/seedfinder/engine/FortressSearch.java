@@ -68,11 +68,24 @@ public final class FortressSearch {
      * @param byCrossroads rank by the biggest group of joined crossroads (then lowest) instead of floor area
      * @param maxY         only count crossroads at or below this height (their floor)
      * @param lines        with byCrossroads: rank by the longest straight line of joined crossroads instead
-     * @param biome        with byCrossroads: only keep fortresses whose ranked crossroads are all in this biome
-     *                     (every 4 blocks across them) at every height from biomeFrom to biomeTo; null for any
+     * @param biome        only keep fortresses in this biome (every 4 blocks, at every height from biomeFrom to
+     *                     biomeTo): with byCrossroads their ranked crossroads; null for any
+     * @param biomeWhole   with biome: every piece of the fortress (its footprint, heights biomeFrom to biomeTo)
+     * @param overlap      list pairs of fortresses (both passing the other filters) whose boxes overlap sideways,
+     *                     biggest overlap first, instead of single fortresses
      */
     public record Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines,
-                         String biome, int biomeFrom, int biomeTo) {
+                         String biome, int biomeFrom, int biomeTo, boolean biomeWhole, boolean overlap) {
+        public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines,
+                      String biome, int biomeFrom, int biomeTo, boolean biomeWhole) {
+            this(area, minDist, top, byCrossroads, maxY, lines, biome, biomeFrom, biomeTo, biomeWhole, false);
+        }
+
+        public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines,
+                      String biome, int biomeFrom, int biomeTo) {
+            this(area, minDist, top, byCrossroads, maxY, lines, biome, biomeFrom, biomeTo, false);
+        }
+
         public Params(Search area, int minDist, int top, boolean byCrossroads, int maxY, boolean lines) {
             this(area, minDist, top, byCrossroads, maxY, lines, null, 0, 0);
         }
@@ -106,6 +119,7 @@ public final class FortressSearch {
                 .getOrThrow(ResourceKey.create(Registries.TEMPLATE_POOL, Identifier.withDefaultNamespace("bastion/starts"))).value();
         int[] r = Structures.regions(p.area(), placement.spacing());
         PriorityQueue<Fortress> best = new PriorityQueue<>(Comparator.comparingLong(f -> f.rank(p)));
+        List<int[]> every = new ArrayList<>();
         AtomicInteger count = new AtomicInteger();
         Structures.eachRow(r, progress, 0, 0.97, "Building fortresses", rx -> {
             for (int rz = r[2]; rz <= r[3]; rz++) {
@@ -145,11 +159,21 @@ public final class FortressSearch {
                     area += (long) b.getXSpan() * b.getZSpan();
                 }
                 Group group = Group.of(roads), line = Group.line(roads);
-                if (p.biome() != null && p.byCrossroads()) {
-                    Group ranked = p.lines() ? line : group;
-                    if (ranked.size < 2 || !inBiome(w, ranked.boxes, p.biome(), p.biomeFrom(), p.biomeTo())) continue;
+                if (p.biome() != null) {
+                    if (p.byCrossroads()) {
+                        Group ranked = p.lines() ? line : group;
+                        if (ranked.size < 2 || !inBiome(w, ranked.boxes, p.biome(), p.biomeFrom(), p.biomeTo())) continue;
+                    }
+                    // The whole fortress: every piece's footprint at every height in the range.
+                    if (p.biomeWhole() && !inBiome(w, parts, p.biome(), p.biomeFrom(), p.biomeTo())) continue;
                 }
                 count.incrementAndGet();
+                if (p.overlap()) {
+                    synchronized (every) {
+                        every.add(new int[]{all.minX(), all.minZ(), all.maxX(), all.maxZ(), x, z, (int) area, all.minY(), all.maxY()});
+                    }
+                    continue;
+                }
                 synchronized (best) {
                     // Keep only the biggest few (with their pieces) so memory stays small.
                     Fortress f = new Fortress(x, z, area, all, parts, crossings, group, line);
@@ -160,6 +184,7 @@ public final class FortressSearch {
                 }
             }
         });
+        if (p.overlap()) return overlaps(every, p, count.get(), progress);
         progress.update(0.98, "Measuring the biggest");
         // Wither skeleton farms: fortress mobs spawn anywhere in the fortress's box on nether bricks
         // (NaturalSpawner.isInNetherFortressBounds), so the best AFK spot covers the most of the box.
@@ -218,6 +243,47 @@ public final class FortressSearch {
      * Gaider10's CrossroadFinder shapes: 2 = double, 3 = triple line or corner, 4 = quad line, square or other, 5 = quint.
      * x, z, y: the north-west crossroad's corner and floor height.
      */
+    /** Pairs of fortresses whose boxes overlap sideways (b: minX, minZ, maxX, maxZ, x, z, floor, minY, maxY). */
+    private static List<Result> overlaps(List<int[]> every, Params p, int count, Progress progress) {
+        every.sort(Comparator.comparingInt(b -> b[0]));
+        List<int[][]> pairs = new ArrayList<>();
+        for (int i = 0; i < every.size(); i++) {
+            int[] a = every.get(i);
+            for (int j = i + 1; j < every.size() && every.get(j)[0] <= a[2]; j++) {
+                int[] b = every.get(j);
+                if (b[1] <= a[3] && a[1] <= b[3]) pairs.add(new int[][]{a, b});
+            }
+        }
+        java.util.function.ToLongFunction<int[][]> shared = q -> (long) (Math.min(q[0][2], q[1][2]) - Math.max(q[0][0], q[1][0]) + 1)
+                * (Math.min(q[0][3], q[1][3]) - Math.max(q[0][1], q[1][1]) + 1);
+        pairs.sort(Comparator.comparingLong(shared).reversed());
+        List<Result> out = new ArrayList<>();
+        for (int[][] q : pairs.subList(0, Math.min(p.top(), pairs.size()))) {
+            int[] a = q[0], b = q[1];
+            int x0 = Math.max(a[0], b[0]), z0 = Math.max(a[1], b[1]), x1 = Math.min(a[2], b[2]), z1 = Math.min(a[3], b[3]);
+            Result res = new Result();
+            res.kind = Result.Kind.FORTRESS;
+            res.dim = Dim.NETHER;
+            res.name = "Overlapping fortresses";
+            res.x = (x0 + x1) / 2;
+            res.z = (z0 + z1) / 2;
+            res.y = 58;
+            res.minX = Math.min(a[0], b[0]);
+            res.minZ = Math.min(a[1], b[1]);
+            res.maxX = Math.max(a[2], b[2]);
+            res.maxZ = Math.max(a[3], b[3]);
+            res.value = shared.applyAsLong(q);
+            res.size = (x1 - x0 + 1) + "x" + (z1 - z0 + 1);
+            res.details.put("Fortress 1", a[4] + ", " + a[5] + " (floor " + Fmt.n(a[6]) + ", y " + a[7] + " to " + a[8] + ")");
+            res.details.put("Fortress 2", b[4] + ", " + b[5] + " (floor " + Fmt.n(b[6]) + ", y " + b[7] + " to " + b[8] + ")");
+            res.details.put("Distance", Fmt.n(p.area().distance(res.x, res.z)));
+            res.ref = new int[]{a[4], a[5]};
+            out.add(res);
+        }
+        progress.update(1, Fmt.n(count) + " fortresses pass, " + Fmt.n(pairs.size()) + " overlapping pairs");
+        return out;
+    }
+
     /** True if the biome is the same everywhere in these boxes (sideways), every 4 blocks, at every height from y0 to y1. */
     private static boolean inBiome(WorldGen w, List<BoundingBox> boxes, String biome, int y0, int y1) {
         for (BoundingBox b : boxes)
