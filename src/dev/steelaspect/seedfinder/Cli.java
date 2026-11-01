@@ -236,7 +236,12 @@ final class Cli {
             return 0;
         }
         OUT.println("Downloading version " + r.version() + " (you have " + SeedFinderApp.VERSION + ")...");
-        java.nio.file.Path dir = dev.steelaspect.seedfinder.store.Updater.install(r, (what, f) -> OUT.print("\r  " + what + " " + (int) (f * 100) + "%   "));
+        String[] shown = {""};
+        java.nio.file.Path dir = dev.steelaspect.seedfinder.store.Updater.install(r, (what, f) -> {
+            String line = "  " + what + " " + (int) (f * 100) + "%";
+            if (!line.equals(shown[0])) OUT.print("\r" + line + "   ");
+            shown[0] = line;
+        });
         OUT.println("\nDone: " + dir + ". It starts the next time you run the Seed Finder.");
         return 0;
     }
