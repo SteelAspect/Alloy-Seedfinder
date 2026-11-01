@@ -28,4 +28,9 @@ if not defined JAVA (
 )
 rem The graphics card code talks to the OpenCL driver through Java's foreign function API (a preview in Java 21).
 set "JDK_JAVA_OPTIONS=--enable-preview --enable-native-access=ALL-UNNAMED %JDK_JAVA_OPTIONS%"
-start "" "%JAVA%" -XX:MaxRAMPercentage=40 -jar "%~dp0AlloySeedFinder.jar" %*
+rem With arguments it's the command line: java.exe (not javaw) in this window, so the output shows.
+if not "%~1"=="" (
+  "%JAVA:javaw.exe=java.exe%" -XX:MaxRAMPercentage=40 -jar "%~dp0AlloySeedFinder.jar" %*
+  exit /b
+)
+start "" "%JAVA%" -XX:MaxRAMPercentage=40 -jar "%~dp0AlloySeedFinder.jar"
