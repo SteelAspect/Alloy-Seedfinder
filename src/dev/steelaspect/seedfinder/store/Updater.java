@@ -33,7 +33,7 @@ import java.util.zip.ZipInputStream;
  * and the launcher starts it from then on.
  */
 public final class Updater {
-    public static final String REPO = "SteelAspect/cytra-seedfinder";
+    public static final String REPO = "SteelAspect/Alloy-Seedfinder";
     private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(10)).build();
 

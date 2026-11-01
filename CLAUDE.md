@@ -4,7 +4,7 @@ Standalone Swing desktop app + CLI that searches Minecraft 1.21.11 seeds by runn
 
 ## What it is
 - Name "Alloy Seed Finder" (was Cytra Seed Finder), version in `src/dev/steelaspect/seedfinder/launcher/Version.java` (`VALUE`, read by the app, `build.sh` and the updater). Shareable zip `dist/AlloySeedFinder-<version>.zip` (about 1 MB) plus `.zip.sha256`.
-- Public repo `SteelAspect/cytra-seedfinder` (made public 2026-11-01; the owner is fine with the SMP seed being public), branch `main` only.
+- Public repo `SteelAspect/Alloy-Seedfinder` (made public 2026-11-01; the owner is fine with the SMP seed being public), branch `main` only.
 - Auto-update (`store/Updater`, `launcher/Updates`): the app reads the latest GitHub release (tag `v<version>`, assets: the zip and its `.zip.sha256`), downloads into the data folder's `updates/<version>`, and `Boot` starts the newest one there. A release = `./build.sh`, then `gh release create v<version> dist/AlloySeedFinder-<version>.zip dist/AlloySeedFinder-<version>.zip.sha256` (ask the owner first). Docs: `README.md` (long: features, verification numbers, gotchas, GPU). **No PROGRESS.txt, no tests folder, no CLAUDE-style notes before this file.** Not in `cytra-releases`.
 
 ## Stack
