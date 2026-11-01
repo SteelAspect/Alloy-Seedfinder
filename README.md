@@ -13,7 +13,19 @@ Tools: biggest biome areas (mesa by default) · the 10 biggest **solid** squares
 huts below a height (huts over cave openings generate deep) · double/triple/quad ocean monument and witch hut AFK
 spots (Quad finder), up to the whole world · slime farm AFK spots and seeds with the best slime farm · nearest structures of a kind (village types,
 treasure bastions, blaze spawners, end cities with a ship and where its elytra hangs) · wither skeleton farm AFK
-spot for each fortress · nether biomes · biggest nether fortresses (floor area, height, volume).
+spot for each fortress · nether biomes · biggest nether fortresses (floor area, height, volume), joined crossroads,
+straight crossroad lines and overlapping fortresses, optionally all in one biome through a height range (nether
+biomes change with height) · nether roof bedrock shapes (wither cage, solid 3x3 blocks, your own pattern).
+
+New in 2.6.0: **Seed overview** (one search: nearest structures, quads, lowest huts, biggest fortress, crossroad line,
+wither cage roof around a point) · **Seed hunts** (new seeds with a quad monument at 0,0 and a quad witch hut nearby;
+low witch huts across the 65,536 versions of a seed) · **Where: border corner** on nether pages (the nether past
+3,750,000 on both axes, where a portal goes to that corner of the overworld world border) · big solid-square searches
+run as 1M x 1M tiles so they don't miss the biggest squares · the form wraps when a page has many options.
+
+Graphics card: any OpenCL 1.2 card (AMD, NVIDIA, Intel). Every graphics card search checks itself against the CPU or
+the game's code first and falls back to the CPU if anything differs or no card works (same results, slower). Work is
+sent in batches of about 40 ms so no driver watchdog resets the card. Tested on an AMD RX 9070 XT (Linux, Mesa).
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
 coordinates.
 

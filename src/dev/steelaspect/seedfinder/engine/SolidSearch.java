@@ -33,7 +33,59 @@ public final class SolidSearch {
 
     private SolidSearch() {}
 
+    /** Largest area searched in one go: beyond it the grid gets too coarse to find the biggest squares. */
+    private static final int TILE_RADIUS = 500_000, TILE_OVERLAP = 2_000;
+
     public static List<Result> run(Params p, Progress progress) {
+        Search a = p.area();
+        if (a.radius() <= TILE_RADIUS) return runOne(p, progress);
+        // Big areas as 1M x 1M tiles (overlapping a little so squares on a seam are seen whole), then the best of all.
+        int side = (int) Math.ceil(2.0 * a.radius() / (2 * TILE_RADIUS)), tiles = side * side;
+        List<Result> all = new ArrayList<>();
+        for (int t = 0; t < tiles; t++) {
+            progress.check();
+            int cx = a.centerX() - a.radius() + TILE_RADIUS + (t / side) * 2 * TILE_RADIUS;
+            int cz = a.centerZ() - a.radius() + TILE_RADIUS + (t % side) * 2 * TILE_RADIUS;
+            Search tile = new Search(a.seed(), a.type(), cx, cz, TILE_RADIUS + TILE_OVERLAP);
+            int done = t;
+            all.addAll(runOne(new Params(tile, p.dim(), p.step(), p.biomes()), new Progress() {
+                @Override
+                public void update(double f, String m) {
+                    progress.update((done + f) / tiles, "Tile " + (done + 1) + " of " + tiles + " · " + m);
+                }
+
+                @Override
+                public boolean cancelled() {
+                    return progress.cancelled();
+                }
+            }));
+        }
+        // Per biome and shape: the 10 biggest, numbered again, distances from the real centre.
+        List<Result> out = new ArrayList<>();
+        for (String b : p.biomes())
+            for (Result.Kind k : new Result.Kind[]{Result.Kind.SQUARE, Result.Kind.RECTANGLE}) {
+                List<Result> list = new ArrayList<>(all.stream().filter(r -> r.name.equals(b) && r.kind == k).toList());
+                list.sort((x, y) -> Double.compare(y.value, x.value));
+                List<Result> kept = new ArrayList<>();
+                for (Result r : list) {
+                    if (kept.size() >= 10) break;
+                    // The same square seen from two overlapping tiles.
+                    if (kept.stream().anyMatch(q -> q.minX == r.minX && q.minZ == r.minZ && q.maxX == r.maxX && q.maxZ == r.maxZ)) continue;
+                    kept.add(r);
+                }
+                for (int i = 0; i < kept.size(); i++) {
+                    Result r = kept.get(i);
+                    r.details.put("Shape", (k == Result.Kind.SQUARE ? "Square" : "Rectangle") + " #" + (i + 1));
+                    r.details.put("Distance", Fmt.n(a.distance(r.x, r.z)));
+                }
+                out.addAll(kept);
+            }
+        out.sort((x, y) -> Double.compare(y.value, x.value));
+        progress.update(1, "Done");
+        return out;
+    }
+
+    private static List<Result> runOne(Params p, Progress progress) {
         WorldGen world = WorldGen.of(p.area().seed(), p.dim(), p.area().type());
         progress.update(0, "Loading the world generator");
         BiomeSearch.Grid g = BiomeSearch.sample(world, p.area(), p.step(), new java.util.HashSet<>(p.biomes()), progress);

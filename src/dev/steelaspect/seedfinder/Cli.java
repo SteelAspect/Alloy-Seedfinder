@@ -55,7 +55,7 @@ final class Cli {
               seedfinder slimepicture <seed> --center x,z --out farm.png               picture of a farm's 17x17 chunks
               seedfinder nearest <seed> --type END_SHIP [--count 10 --within 1000000]   nearest structures of a kind
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
-              seedfinder roof <seed> [--pattern "?????,...,?????/..."]                 nether roof bedrock spots (default: nether9's wither cage)
+              seedfinder roof <seed> [--shape 3x3x2 | --pattern "?????,...,?????/..."]  nether roof bedrock spots (default: nether9's wither cage)
               seedfinder lowhuts <seed> [--radius 10000] [--max-y -50] [--any]        low huts near 0,0 in all 65,536 top-bit versions (--any: quad monument not needed)
               seedfinder fortresses <seed> [--crossroads|--lines [--max-y 60] [--biome soul_sand_valley --biome-y 48-93 [--biome-whole]] [--overlap]]  most floor, joined crossroads, straight lines
 
@@ -147,10 +147,10 @@ final class Cli {
             return 0;
         }
         if (mode.equals("quadseeds")) {
-            List<Long> seeds = QuadHunt.run(new QuadHunt.Params(Long.parseLong(opt.getOrDefault("--from", "0")),
+            List<QuadHunt.Found> seeds = QuadHunt.run(new QuadHunt.Params(Long.parseLong(opt.getOrDefault("--from", "0")),
                     Long.parseLong(opt.getOrDefault("--count", "281474976710656")), Integer.parseInt(opt.getOrDefault("--hut-range", "30000")),
                     Integer.parseInt(opt.getOrDefault("--seeds", "1")), OUT), Progress.NONE);
-            OUT.println("Seeds: " + seeds);
+            for (QuadHunt.Found f : seeds) OUT.println("  seed " + f.seed() + ": quad monument at 0,0, quad hut near " + f.hutX() + ", " + f.hutZ());
             return 0;
         }
         Progress p = progress();
@@ -176,7 +176,9 @@ final class Cli {
             case "nearest" -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type,
                     NearestSearch.Target.valueOf(opt.getOrDefault("--type", "VILLAGE").toUpperCase(Locale.ROOT)), area.centerX(), area.centerZ(),
                     Integer.parseInt(opt.getOrDefault("--count", "10")), Integer.parseInt(opt.getOrDefault("--within", "1000000"))), p);
-            case "roof" -> RoofSearch.run(new RoofSearch.Params(area, opt.getOrDefault("--pattern", RoofSearch.WITHER_CAGE), top), p);
+            case "roof" -> RoofSearch.run(new RoofSearch.Params(area, opt.containsKey("--shape") ? RoofSearch.PRESETS.entrySet().stream()
+                    .filter(e -> e.getKey().toLowerCase(Locale.ROOT).startsWith(opt.get("--shape").toLowerCase(Locale.ROOT))).map(Map.Entry::getValue).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Shapes: " + RoofSearch.PRESETS.keySet())) : opt.getOrDefault("--pattern", RoofSearch.WITHER_CAGE), top), p);
             case "fortresses" -> FortressSearch.run(new FortressSearch.Params(area, Integer.parseInt(opt.getOrDefault("--min-dist", "0")), top,
                     opt.containsKey("--crossroads") || opt.containsKey("--lines"), Integer.parseInt(opt.getOrDefault("--max-y", "255")), opt.containsKey("--lines"),
                     opt.get("--biome"), Integer.parseInt(opt.getOrDefault("--biome-y", "48-93").split("-")[0]), Integer.parseInt(opt.getOrDefault("--biome-y", "48-93").split("-")[1]), opt.containsKey("--biome-whole"), opt.containsKey("--overlap")), p);

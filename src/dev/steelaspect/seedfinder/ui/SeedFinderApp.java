@@ -44,7 +44,7 @@ import java.util.Map;
 /** The main window: top bar with the seed, sidebar with the tools, and the current page. */
 public final class SeedFinderApp {
     public static final String NAME = "Alloy Seed Finder";
-    public static final String VERSION = "2.5.0";
+    public static final String VERSION = "2.6.0";
 
     private final Settings settings = Settings.load();
     private final JFrame frame = new JFrame(NAME);
@@ -83,7 +83,7 @@ public final class SeedFinderApp {
         mapPage = new MapPage(this);
         add("map", mapPage);
         for (SearchPage p : List.of(new Pages.Biomes(this), new Pages.Solid(this), new Pages.Huts(this), new Pages.Monuments(this), new Pages.Slime(this), new Pages.SlimeSeeds(this), new Pages.Nearest(this),
-                new Pages.Nether(this), new Pages.Fortresses(this), new Pages.Roof(this))) {
+                new Pages.Nether(this), new Pages.Fortresses(this), new Pages.Roof(this), new Pages.SeedHunts(this), new Pages.Overview(this))) {
             p.build();
             searchPages.add(p);
             add(p.id, p);
@@ -97,6 +97,8 @@ public final class SeedFinderApp {
         sidebar.section("Explore");
         sidebar.item("map", "Map", "map");
         sidebar.item("nearest", "Nearest structures", "list");
+        sidebar.item("overview", "Seed overview", "eye");
+        sidebar.item("seedhunts", "Seed hunts", "search");
         sidebar.section("Overworld");
         sidebar.item("biomes", "Biomes", "mountain");
         sidebar.item("solid", "Solid areas", "square");
@@ -107,6 +109,7 @@ public final class SeedFinderApp {
         sidebar.section("Nether");
         sidebar.item("nether", "Nether biomes", "flame");
         sidebar.item("fortresses", "Fortresses", "castle");
+        sidebar.item("roof", "Nether roof", "tower");
         sidebar.section("App");
         sidebar.item("history", "Saved results", "clock");
         sidebar.item("settings", "Settings", "gear");

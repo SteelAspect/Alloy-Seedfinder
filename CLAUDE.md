@@ -1,9 +1,9 @@
 # Alloy Seed Finder (repo: cytra-seedfinder)
 
-Standalone Swing desktop app + CLI that searches Minecraft 1.21.11 seeds by running the game's own world generator. Not a Fabric mod and not a Gradle project. Workspace rules: `../CLAUDE.md`. The user's SMP seed is `1486470357373204722`.
+Standalone Swing desktop app + CLI that searches Minecraft 1.21.11 seeds by running the game's own world generator. Not a Fabric mod and not a Gradle project. Workspace rules: `../CLAUDE.md`. The user's SMP seed is `1473884015873122059` (`1486470357373204722` is the quad monument + quad hut seed found by the hunt; `795374283637013279` has a y -58 hut 7.3k out).
 
 ## What it is
-- Name "Alloy Seed Finder" (was Cytra Seed Finder), `VERSION = "2.5.0"` in `src/dev/steelaspect/seedfinder/ui/SeedFinderApp.java` (about 12k lines of Java). Shareable zip `dist/AlloySeedFinder-<version>.zip` (about 1 MB).
+- Name "Alloy Seed Finder" (was Cytra Seed Finder), `VERSION = "2.6.0"` in `src/dev/steelaspect/seedfinder/ui/SeedFinderApp.java` (about 12k lines of Java). Shareable zip `dist/AlloySeedFinder-<version>.zip` (about 1 MB).
 - Private repo `SteelAspect/cytra-seedfinder`, branch `main` only. Docs: `README.md` (long: features, verification numbers, gotchas, GPU). **No PROGRESS.txt, no tests folder, no CLAUDE-style notes before this file.** Not in `cytra-releases`.
 
 ## Stack

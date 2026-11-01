@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /**
  * Seeds with a quad ocean monument at 0,0 and a quad witch hut nearby.
@@ -76,46 +77,136 @@ public final class QuadHunt {
     /** A structure seed with a quad monument at 0,0 and a quad hut whose 2x2 regions start at (hx, hz). */
     public record Hit(long structureSeed, int hx, int hz) {}
 
+    /** A full seed with both quads: the quad hut's region corner (blocks) is about hutX, hutZ. */
+    public record Found(long seed, int hutX, int hutZ) {}
+
     private QuadHunt() {}
 
-    public static List<Long> run(Params p, Progress progress) throws GpuException {
+    public static List<Found> run(Params p, Progress progress) throws GpuException {
         WorldGen w = WorldGen.of(0, Dim.OVERWORLD, WorldType.NORMAL);
         RandomSpreadStructurePlacement mon = Structures.placement(w, BuiltinStructureSets.OCEAN_MONUMENTS);
         RandomSpreadStructurePlacement hut = Structures.placement(w, BuiltinStructureSets.SWAMP_HUTS);
-        OpenCl cl = Gpu.get();
-        if (cl == null) throw new GpuException("no graphics card: " + Gpu.status());
-        OpenCl.Program program = cl.program(SOURCE, "-cl-std=CL1.2", dev.steelaspect.seedfinder.launcher.AppDirs.cache().toPath().resolve("gpu"));
-        List<Long> found = new ArrayList<>();
-        ConcurrentLinkedQueue<Hit> hits = new ConcurrentLinkedQueue<>();
+        // The graphics card if it works (any OpenCL 1.2 card: AMD, NVIDIA, Intel), checked against the game's own
+        // placement first; otherwise the same maths on every CPU core (much slower, same results).
+        OpenCl cl = GpuWorld.enabled() ? Gpu.get() : null;
+        OpenCl.Program program = null;
+        if (cl != null) {
+            try {
+                program = cl.program(SOURCE, "-cl-std=CL1.2", dev.steelaspect.seedfinder.launcher.AppDirs.cache().toPath().resolve("gpu"));
+            } catch (GpuException e) {
+                Mc.ERR.println("Graphics card not used for the quad hunt: " + e.getMessage());
+            }
+        }
+        if (program == null) return cpuHunt(p, progress, mon, hut);
         try (OpenCl.Kernel k = program.kernel("quad"); OpenCl.Buffer out = cl.buffer(8L * CAP); OpenCl.Buffer n = cl.buffer(4)) {
-            selfCheck(k, out, n, mon, hut);
-            long start = System.nanoTime(), last = start, quads = 0;
-            for (long done = 0; done < p.count() && found.size() < p.maxSeeds(); done += RUN) {
-                progress.check();
-                long base = (p.from() + done) & MASK;
-                for (long c : candidates(k, out, n, mon, base, RUN, SPAN)) {
-                    if (!quad(chunks(mon, c, 0, 0), 0)) continue;
-                    quads++;
-                    p.log().println("quad monument " + c);
-                    for (Hit h : huts(hut, c, p.hutRange())) {
-                        p.log().printf("structure seed %d: quad monument at 0,0, quad hut regions %d,%d (~%d, %d)%n",
-                                c, h.hx, h.hz, (h.hx + 1) * 512, (h.hz + 1) * 512);
-                        List<Long> full = biomes(h);
-                        p.log().printf("  %d full seeds with all 8 structures: %s%n", full.size(), full.subList(0, Math.min(20, full.size())));
-                        found.addAll(full);
-                        hits.add(h);
-                    }
+            try {
+                selfCheck(k, out, n, mon, hut);
+            } catch (GpuException e) {
+                Mc.ERR.println("Graphics card not used for the quad hunt: " + e.getMessage());
+                return cpuHunt(p, progress, mon, hut);
+            }
+            return hunt(p, progress, mon, hut, (base, items, span) -> candidates(k, out, n, mon, base, items, span), cl.device());
+        }
+    }
+
+    /** The CPU path, after checking its maths against the game's placement code. */
+    private static List<Found> cpuHunt(Params p, Progress progress, RandomSpreadStructurePlacement mon, RandomSpreadStructurePlacement hut) throws GpuException {
+        long base = 0x9E3779B97F4AL;
+        for (RandomSpreadStructurePlacement pl : List.of(mon, hut)) {
+            int span = pl == mon ? 22 : 20, slice = 1 << 20;
+            long[] ours = cpuCandidates(pl, base, slice, span);
+            java.util.Arrays.sort(ours);
+            long[] game = IntStream.range(0, slice).parallel().mapToLong(i -> base + i).filter(s -> fits(chunks(pl, s, 0, 0), span)).toArray();
+            if (game.length == 0 || !java.util.Arrays.equals(ours, game))
+                throw new IllegalStateException("quad hunt maths differs from the game (" + ours.length + " vs " + game.length + ")");
+        }
+        return hunt(p, progress, mon, hut, (b, items, span) -> cpuCandidates(mon, b, items, span), "CPU");
+    }
+
+    /** One batch of structure seeds [base, base + items) whose 4 corner monuments fit in a span x span square. */
+    private interface Batch {
+        long[] candidates(long base, long items, int span) throws GpuException;
+    }
+
+    /** Wall time per batch: short enough that no graphics driver watchdog (about 2 s on Windows) resets the card. */
+    private static final double TARGET_SECONDS = 0.04;
+
+    private static List<Found> hunt(Params p, Progress progress, RandomSpreadStructurePlacement mon, RandomSpreadStructurePlacement hut,
+                                    Batch batch, String on) throws GpuException {
+        List<Found> found = new ArrayList<>();
+        ConcurrentLinkedQueue<Hit> hits = new ConcurrentLinkedQueue<>();
+        long start = System.nanoTime(), last = start, quads = 0, items = 1L << 20;
+        for (long done = 0; done < p.count() && found.size() < p.maxSeeds(); ) {
+            progress.check();
+            long base = (p.from() + done) & MASK;
+            // Whole work groups of 256 (a few seeds past the end of a short run don't matter).
+            long size = (Math.min(items, p.count() - done) + 255) / 256 * 256;
+            long t0 = System.nanoTime();
+            long[] cands = batch.candidates(base, size, SPAN);
+            double took = (System.nanoTime() - t0) / 1e9;
+            done += size;
+            // Next batch sized for about 40 ms on this card (or CPU), whatever it is.
+            items = Math.max(1L << 16, Math.min(RUN, (long) (size * Math.min(4, Math.max(0.25, TARGET_SECONDS / Math.max(took, 1e-4))))));
+            for (long c : cands) {
+                if (!quad(chunks(mon, c, 0, 0), 0)) continue;
+                quads++;
+                p.log().println("quad monument " + c);
+                for (Hit h : huts(hut, c, p.hutRange())) {
+                    p.log().printf("structure seed %d: quad monument at 0,0, quad hut regions %d,%d (~%d, %d)%n",
+                            c, h.hx, h.hz, (h.hx + 1) * 512, (h.hz + 1) * 512);
+                    List<Long> full = biomes(h);
+                    p.log().printf("  %d full seeds with all 8 structures: %s%n", full.size(), full.subList(0, Math.min(20, full.size())));
+                    for (long seed : full) found.add(new Found(seed, (h.hx + 1) * 512, (h.hz + 1) * 512));
+                    hits.add(h);
                 }
-                long now = System.nanoTime();
-                if (now - last > 30e9 || done + RUN >= p.count()) {
-                    last = now;
-                    double rate = (done + RUN) / ((now - start) / 1e9);
-                    p.log().printf("[%s] %.3e seeds (next --from %d), %.2e seeds/s, %d quad monuments, %d hut hits, %d full seeds%n",
-                            java.time.LocalTime.now().withNano(0), (double) (done + RUN), p.from() + done + RUN, rate, quads, hits.size(), found.size());
-                }
+            }
+            double rate = done / ((System.nanoTime() - start) / 1e9);
+            progress.update(Math.min(1, (double) done / p.count()), String.format(java.util.Locale.ROOT,
+                    "%.2e seeds tried (%.1e/s, %s) · %d quad monuments · %d quad huts near one · %d seeds found", (double) done, rate, on, quads, hits.size(), found.size()));
+            long now = System.nanoTime();
+            if (now - last > 30e9 || done >= p.count()) {
+                last = now;
+                p.log().printf("[%s] %.3e seeds (next --from %d), %.2e seeds/s on %s, %d quad monuments, %d hut hits, %d full seeds%n",
+                        java.time.LocalTime.now().withNano(0), (double) done, p.from() + done, rate, on, quads, hits.size(), found.size());
             }
         }
         return found;
+    }
+
+    /**
+     * The graphics card's test in Java: the 4 monuments around 0,0 (Java's Random, as the game seeds it per region) fit in a
+     * span x span chunk square. Checked against the game's own placement code at start.
+     */
+    private static long[] cpuCandidates(RandomSpreadStructurePlacement pl, long base, long items, int span) {
+        int salt = salt(pl), spacing = pl.spacing(), lim = spacing - pl.separation();
+        boolean tri = pl.spreadType() == net.minecraft.world.level.levelgen.structure.placement.RandomSpreadType.TRIANGULAR;
+        return LongStream.range(0, items).parallel().map(i -> (base + i) & MASK).filter(seed -> {
+            int minx = Integer.MAX_VALUE, maxx = Integer.MIN_VALUE, minz = Integer.MAX_VALUE, maxz = Integer.MIN_VALUE;
+            for (int k = 0; k < 4; k++) {
+                int rx = (k & 1) == 1 ? -1 : 0, rz = (k & 2) == 2 ? -1 : 0;
+                long[] s = {((rx * 341873128712L + rz * 132897987541L + salt + seed) ^ 0x5DEECE66DL) & MASK};
+                int x = tri ? (nint(s, lim) + nint(s, lim)) / 2 : nint(s, lim);
+                int z = tri ? (nint(s, lim) + nint(s, lim)) / 2 : nint(s, lim);
+                int cx = rx * spacing + x, cz = rz * spacing + z;
+                minx = Math.min(minx, cx);
+                maxx = Math.max(maxx, cx);
+                minz = Math.min(minz, cz);
+                maxz = Math.max(maxz, cz);
+                if (maxx - minx > span || maxz - minz > span) return false;
+            }
+            return true;
+        }).toArray();
+    }
+
+    /** java.util.Random.nextInt(n) for n not a power of 2, on a raw 48-bit state. */
+    private static int nint(long[] s, int n) {
+        int bits, val;
+        do {
+            s[0] = (s[0] * 0x5DEECE66DL + 0xBL) & MASK;
+            bits = (int) (s[0] >>> 17);
+            val = bits % n;
+        } while (bits - val + (n - 1) < 0);
+        return val;
     }
 
     /** Structure seeds in [base, base + RUN) whose 4 corner structures fit in a span x span chunk square. */

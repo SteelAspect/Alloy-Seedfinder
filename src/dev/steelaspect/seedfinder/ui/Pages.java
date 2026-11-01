@@ -158,7 +158,7 @@ final class Pages {
         @Override
         protected void buildForm(JPanel form) {
             combo(form, "biome", "Biome", biomeChoices(true), 190);
-            areaFields(form, "100k × 100k");
+            areaFields(form, "100k × 100k", true);
             JComboBox<String> d = combo(form, "detail", "Detail", DETAIL.keySet().toArray(String[]::new), 160);
             d.setSelectedIndex(2);
         }
@@ -427,17 +427,26 @@ final class Pages {
 
     static final class Fortresses extends SearchPage {
         Fortresses(SeedFinderApp app) {
-            super(app, "fortresses", "Fortresses", "Biggest nether fortresses by floor area with the best wither skeleton farm AFK spot, or the biggest groups of joined crossroads. About 3 min per 1M × 1M.");
+            super(app, "fortresses", "Fortresses", "Biggest fortresses, joined crossroads, straight crossroad lines or overlapping fortresses, "
+                    + "optionally all in one biome. About 3 min per 1M × 1M.");
         }
 
-        private static final String[] RANKS = {"Floor area", "Joined crossroads", "Straight crossroad lines"};
+        private static final String[] RANKS = {"Floor area", "Joined crossroads", "Straight crossroad lines", "Overlapping fortresses"};
+        private static final String[] BIOMES = {"Any biome", "soul_sand_valley", "nether_wastes", "crimson_forest", "warped_forest", "basalt_deltas"};
+        private static final String[] BIOME_WHAT = {"Whole fortress", "Just the crossroads"};
 
         @Override
         protected void buildForm(JPanel form) {
-            combo(form, "rank", "Rank by", RANKS, 170).setToolTipText("<html><b>Joined crossroads</b>: 4-way bridge crossings side by side at the same height"
-                    + "<br>(double, triple line or corner, quad line or square, quint), like Gaider10's CrossroadFinder.</html>");
+            combo(form, "rank", "Rank by", RANKS, 190).setToolTipText("<html><b>Joined crossroads</b>: 4-way bridge crossings side by side at the same height"
+                    + "<br>(double, triple line or corner, quad line or square, quint), like Gaider10's CrossroadFinder."
+                    + "<br><b>Straight crossroad lines</b>: the longest straight run of them."
+                    + "<br><b>Overlapping fortresses</b>: pairs whose areas overlap, biggest overlap first.</html>");
             text(form, "maxY", "Crossroads at or below y", "255", 100);
-            areaFields(form, "100k × 100k");
+            combo(form, "biome", "All in biome", BIOMES, 160).setToolTipText("<html>Nether biomes change with height: the biome is checked every 4 blocks"
+                    + "<br>at every height in the range below.</html>");
+            text(form, "biomeY", "Heights", "48-93", 80);
+            combo(form, "biomeWhat", "Check", BIOME_WHAT, 150);
+            areaFields(form, "100k × 100k", true);
             text(form, "minDist", "At least this far out", "0", 150);
         }
 
@@ -447,9 +456,25 @@ final class Pages {
         }
 
         @Override
+        protected java.util.Set<String> highlight() {
+            return value("biome").equals(BIOMES[0]) ? java.util.Set.of() : java.util.Set.of(value("biome"));
+        }
+
+        @Override
         protected List<Result> run(Settings.Seed seed, Progress progress) {
-            return FortressSearch.run(new FortressSearch.Params(area(seed), number("minDist", "the distance"), 50,
-                    !value("rank").equals(RANKS[0]), number("maxY", "the height"), value("rank").equals(RANKS[2])), progress);
+            String rank = value("rank"), biome = value("biome").equals(BIOMES[0]) ? null : value("biome");
+            int[] ys;
+            try {
+                String[] h = value("biomeY").split("\\s*(-|to)\\s*");
+                ys = new int[]{Integer.parseInt(h[0].trim()), Integer.parseInt(h[h.length - 1].trim())};
+            } catch (RuntimeException e) {
+                throw new BadInput("Enter the heights like 48-93");
+            }
+            boolean whole = value("biomeWhat").equals(BIOME_WHAT[0]);
+            boolean crossroads = rank.equals(RANKS[1]) || rank.equals(RANKS[2]);
+            if (biome != null && !whole && !crossroads) throw new BadInput("\"Just the crossroads\" needs Rank by joined crossroads or straight lines");
+            return FortressSearch.run(new FortressSearch.Params(area(seed), number("minDist", "the distance"), 50, crossroads, number("maxY", "the height"),
+                    rank.equals(RANKS[2]), biome, Math.min(ys[0], ys[1]), Math.max(ys[0], ys[1]), biome != null && whole, rank.equals(RANKS[3])), progress);
         }
     }
 
@@ -457,14 +482,28 @@ final class Pages {
 
     static final class Roof extends SearchPage {
         Roof(SeedFinderApp app) {
-            super(app, "roof", "Nether roof", "Bedrock patterns in the nether roof (y 123 to 126), like nether9: the default is a wither cage. Nearest first.");
+            super(app, "roof", "Nether roof", "Bedrock shapes in the nether roof (y 123 to 126): a wither cage like nether9, solid 3x3 blocks, or your own pattern. Nearest first.");
         }
 
         @Override
         protected void buildForm(JPanel form) {
-            text(form, "pattern", "Pattern", dev.steelaspect.seedfinder.engine.RoofSearch.WITHER_CAGE, 420).setToolTipText("<html>Layers y 123, 124, 125, 126 separated by <b>/</b>;"
+            java.util.List<String> shapes = new java.util.ArrayList<>(dev.steelaspect.seedfinder.engine.RoofSearch.PRESETS.keySet());
+            shapes.add("Custom");
+            JComboBox<String> shape = combo(form, "shape", "Shape", shapes.toArray(String[]::new), 250);
+            javax.swing.JTextField pattern = text(form, "pattern", "Pattern", dev.steelaspect.seedfinder.engine.RoofSearch.WITHER_CAGE, 300);
+            pattern.setToolTipText("<html>Layers y 123, 124, 125, 126 separated by <b>/</b>;"
                     + " each 5 rows (north first) of 5 blocks (west first), separated by commas.<br><b>#</b> bedrock, <b>.</b> no bedrock, <b>?</b> anything."
-                    + "<br>The default is nether9's wither cage: open at y 123, a full 3 x 3 at y 124, a ring of 8 at y 125.</html>");
+                    + "<br>y 127 is always bedrock. Pick a shape to fill this in, or type your own.</html>");
+            shape.addActionListener(e -> {
+                String p = dev.steelaspect.seedfinder.engine.RoofSearch.PRESETS.get(String.valueOf(shape.getSelectedItem()));
+                if (p != null) pattern.setText(p);
+            });
+            pattern.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyTyped(java.awt.event.KeyEvent e) {
+                    shape.setSelectedItem("Custom");
+                }
+            });
             areaFields(form, "20k × 20k");
         }
 
@@ -481,6 +520,184 @@ final class Pages {
                 throw new BadInput(e.getMessage());
             }
             return dev.steelaspect.seedfinder.engine.RoofSearch.run(new dev.steelaspect.seedfinder.engine.RoofSearch.Params(area(seed), value("pattern"), 50), progress);
+        }
+    }
+
+    // ------------------------------------------------------------------ seed hunts
+
+    static final class SeedHunts extends SearchPage {
+        private static final String QUAD = "Quad monument + quad witch hut", LOW = "Low witch huts · versions of my seed";
+
+        SeedHunts(SeedFinderApp app) {
+            super(app, "seedhunts", "Seed hunts", "Find new seeds: a quad ocean monument at 0,0 with a quad witch hut nearby (graphics card), "
+                    + "or low witch huts near 0,0 in the 65,536 versions of your seed. Each result is its own seed.");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            combo(form, "hunt", "Hunt", new String[]{QUAD, LOW}, 270).setToolTipText("<html><b>Quad monument + quad hut</b>: where structures go depends only on the"
+                    + "<br>low 48 bits of a seed, so the graphics card tries every one (about 20 billion a second) for 4 monuments"
+                    + "<br>around 0,0, then the game's own code checks the quad hut and all biomes. Expect a few seeds an hour."
+                    + "<br><b>Low witch huts</b>: same hut spots in every version of your seed, but different ground under them."
+                    + "<br>Huts below y -54 need a mineshaft under them, which this doesn't model.</html>");
+            text(form, "range", "Within (blocks of 0,0)", "30000", 150);
+            text(form, "count", "Stop after (seeds)", "5", 120);
+            text(form, "maxY", "Huts at or below y", "-40", 120);
+            check(form, "keepMon", "Keep the quad monument", false).setToolTipText("Low huts: only versions where the seed's quad monument at 0,0 still generates");
+        }
+
+        @Override
+        protected Search area(Settings.Seed seed) {
+            return new Search(seed.value(), seed.type, 0, 0, Math.max(1000, number("range", "the range")));
+        }
+
+        @Override
+        protected Dim dim() {
+            return Dim.OVERWORLD;
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) throws Exception {
+            int range = number("range", "the range"), count = number("count", "the number of seeds");
+            List<Result> out = new java.util.ArrayList<>();
+            if (value("hunt").equals(QUAD)) {
+                // Each person starts somewhere different, so two people don't find the same seeds.
+                long from = java.util.concurrent.ThreadLocalRandom.current().nextLong() & ((1L << 48) - 1);
+                for (dev.steelaspect.seedfinder.engine.QuadHunt.Found f : dev.steelaspect.seedfinder.engine.QuadHunt.run(
+                        new dev.steelaspect.seedfinder.engine.QuadHunt.Params(from, 1L << 48, range, count, new java.io.PrintStream(java.io.OutputStream.nullOutputStream())), progress)) {
+                    Result r = new Result();
+                    r.kind = Result.Kind.STRUCTURE;
+                    r.dim = Dim.OVERWORLD;
+                    r.name = "Quad seed";
+                    r.seed = f.seed();
+                    r.x = f.hutX();
+                    r.z = f.hutZ();
+                    r.y = 64;
+                    r.size = Long.toString(f.seed());
+                    r.details.put("Seed", Long.toString(f.seed()));
+                    r.details.put("Quad monument", "around 0, 0 (use the Quad finder on this seed for the AFK spot)");
+                    r.details.put("Quad witch hut", "around " + f.hutX() + ", " + f.hutZ());
+                    out.add(r);
+                }
+                return out;
+            }
+            int maxY = number("maxY", "the height");
+            for (dev.steelaspect.seedfinder.engine.QuadHunt.LowHut h : dev.steelaspect.seedfinder.engine.QuadHunt.lowHuts(seed.value(), range, maxY,
+                    Boolean.parseBoolean(value("keepMon")), progress)) {
+                if (out.size() >= Math.max(count, 50)) break;
+                Result r = new Result();
+                r.kind = Result.Kind.HUT;
+                r.dim = Dim.OVERWORLD;
+                r.name = "Witch hut";
+                r.seed = h.seed();
+                r.x = h.x() + 3;
+                r.z = h.z() + 4;
+                r.y = h.y() + 2;
+                r.minX = h.x();
+                r.minZ = h.z();
+                r.maxX = h.x() + 8;
+                r.maxZ = h.z() + 8;
+                r.size = "Floor y " + (h.y() + 1);
+                r.details.put("Seed", Long.toString(h.seed()));
+                r.details.put("Distance", dev.steelaspect.seedfinder.engine.Fmt.n(Math.round(Math.hypot(h.x(), h.z()))));
+                if (h.quadMonument()) r.details.put("Quad monument", "at 0, 0");
+                out.add(r);
+            }
+            return out;
+        }
+    }
+
+    // ------------------------------------------------------------------ seed overview
+
+    static final class Overview extends SearchPage {
+        private static final Map<String, Integer> HOW_FAR = new LinkedHashMap<>();
+
+        static {
+            HOW_FAR.put("5,000 blocks", 5_000);
+            HOW_FAR.put("10,000 blocks", 10_000);
+            HOW_FAR.put("20,000 blocks", 20_000);
+            HOW_FAR.put("50,000 blocks", 50_000);
+        }
+
+        Overview(SeedFinderApp app) {
+            super(app, "overview", "Seed overview", "The best of everything around a point in one go: nearest structures, quads, the lowest witch huts, "
+                    + "the biggest fortress, crossroad lines and a wither cage roof. Nether checks are around the matching nether spot (x ÷ 8, z ÷ 8).");
+        }
+
+        @Override
+        protected void buildForm(JPanel form) {
+            text(form, "center", "Around x, z (overworld)", "0, 0", 170);
+            combo(form, "far", "How far", HOW_FAR.keySet().toArray(String[]::new), 150).setSelectedIndex(1);
+        }
+
+        private int far() {
+            return HOW_FAR.getOrDefault(value("far"), 10_000);
+        }
+
+        @Override
+        protected Search area(Settings.Seed seed) {
+            return areaFrom(seed, far());
+        }
+
+        @Override
+        protected Dim dim() {
+            return Dim.OVERWORLD;
+        }
+
+        @Override
+        protected List<Result> run(Settings.Seed seed, Progress progress) {
+            Search a = area(seed);
+            int r = a.radius(), nr = Math.max(2_000, r / 8);
+            Search nether = new Search(seed.value(), seed.type, Math.floorDiv(a.centerX(), 8), Math.floorDiv(a.centerZ(), 8), nr);
+            List<Result> out = new java.util.ArrayList<>();
+            List<String> problems = new java.util.ArrayList<>();
+            // name, job: each check gets an equal share of the progress bar.
+            List<Map.Entry<String, java.util.concurrent.Callable<List<Result>>>> jobs = new java.util.ArrayList<>();
+            for (NearestSearch.Target t : new NearestSearch.Target[]{NearestSearch.Target.VILLAGE, NearestSearch.Target.TRIAL_CHAMBER,
+                    NearestSearch.Target.ANCIENT_CITY, NearestSearch.Target.STRONGHOLD, NearestSearch.Target.MANSION, NearestSearch.Target.MONUMENT,
+                    NearestSearch.Target.BASTION_TREASURE}) {
+                boolean n = t.dim() == Dim.NETHER;
+                jobs.add(Map.entry(t.label, () -> NearestSearch.run(new NearestSearch.Params(seed.value(), seed.type, t,
+                        n ? nether.centerX() : a.centerX(), n ? nether.centerZ() : a.centerZ(), 1, n ? nr : r), quiet(progress))));
+            }
+            jobs.add(Map.entry("Monument quads", () -> MonumentSearch.run(new MonumentSearch.Params(a, MonumentSearch.Kind.MONUMENT, 3, 0, 1), quiet(progress))));
+            jobs.add(Map.entry("Witch hut quads", () -> MonumentSearch.run(new MonumentSearch.Params(a, MonumentSearch.Kind.HUT, 3, 0, 1), quiet(progress))));
+            jobs.add(Map.entry("Lowest witch huts", () -> HutSearch.run(new HutSearch.Params(a, -30, 3), quiet(progress))));
+            jobs.add(Map.entry("Biggest fortress", () -> FortressSearch.run(new FortressSearch.Params(nether, 0, 1), quiet(progress))));
+            jobs.add(Map.entry("Crossroad line", () -> FortressSearch.run(new FortressSearch.Params(nether, 0, 1, true, 255, true), quiet(progress))));
+            jobs.add(Map.entry("Wither cage roof", () -> dev.steelaspect.seedfinder.engine.RoofSearch.run(
+                    new dev.steelaspect.seedfinder.engine.RoofSearch.Params(new Search(seed.value(), seed.type, nether.centerX(), nether.centerZ(), 2_000),
+                            dev.steelaspect.seedfinder.engine.RoofSearch.WITHER_CAGE, 1), quiet(progress))));
+            for (int i = 0; i < jobs.size(); i++) {
+                progress.check();
+                progress.update((double) i / jobs.size(), "Checking " + jobs.get(i).getKey().toLowerCase(java.util.Locale.ROOT));
+                try {
+                    for (Result res : jobs.get(i).getValue().call()) {
+                        res.details.put("Check", jobs.get(i).getKey());
+                        if (res.dim == Dim.NETHER) res.name += " (nether)";
+                        out.add(res);
+                    }
+                } catch (Progress.Cancelled e) {
+                    throw e;
+                } catch (Exception e) {
+                    problems.add(jobs.get(i).getKey());
+                }
+            }
+            progress.update(1, out.size() + " things found" + (problems.isEmpty() ? "" : " · couldn't check: " + String.join(", ", problems)));
+            return out;
+        }
+
+        /** A part's own progress messages would flicker over the overview's; only stopping passes through. */
+        private static Progress quiet(Progress outer) {
+            return new Progress() {
+                @Override
+                public void update(double fraction, String message) {}
+
+                @Override
+                public boolean cancelled() {
+                    return outer.cancelled();
+                }
+            };
         }
     }
 }
