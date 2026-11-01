@@ -57,6 +57,9 @@ final class SettingsPage extends JPanel {
         column.add(section("Graphics card", "Biomes for the map and for biome and solid searches can be worked out on the graphics card: "
                 + "the game's own generator rebuilt for it, checked against Minecraft before it's used. Not used at Light speed.", gpuPanel()));
         column.add(gap());
+        column.add(section("Updates", "Version " + dev.steelaspect.seedfinder.ui.SeedFinderApp.VERSION + ". New versions come from github.com/"
+                + dev.steelaspect.seedfinder.store.Updater.REPO + " (checked against their checksum) and start the next time you open the app.", updatesPanel()));
+        column.add(gap());
         column.add(section("Files", "Settings: " + Settings.FILE + "\nSaved results: " + History.DIR + "\nMap cache: " + TileCache.DIR, null));
         JPanel holder = Ui.clear(new BorderLayout());
         holder.add(column, BorderLayout.NORTH);
@@ -159,6 +162,26 @@ final class SettingsPage extends JPanel {
         JPanel p = Ui.clear(new java.awt.GridLayout(0, 1, 0, 10));
         p.add(Ui.labelled("Xaero's minimap folder (…/xaero/minimap). Empty = find it automatically", Ui.row(8, xaeroDir, browse)));
         p.add(Ui.labelled("Cytra Waypoints category", Ui.row(0, category)));
+        return p;
+    }
+
+    private final JCheckBox checkUpdates = Ui.check("Check for a new version when the app starts", true);
+    private final JLabel updateStatus = Ui.muted(" ");
+
+    private JComponent updatesPanel() {
+        checkUpdates.setSelected(app.settings().checkUpdates);
+        checkUpdates.addActionListener(e -> {
+            app.settings().checkUpdates = checkUpdates.isSelected();
+            app.settings().save();
+        });
+        Ui.FlatButton now = Ui.button("Check now", "download", Ui.Kind.SECONDARY);
+        now.addActionListener(e -> {
+            updateStatus.setText("Checking…");
+            app.checkForUpdate(updateStatus::setText);
+        });
+        JPanel p = Ui.clear(new java.awt.GridLayout(0, 1, 0, 8));
+        p.add(checkUpdates);
+        p.add(Ui.row(10, now, updateStatus));
         return p;
     }
 

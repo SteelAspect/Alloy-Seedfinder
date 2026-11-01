@@ -57,6 +57,7 @@ final class Cli {
               seedfinder quadseeds [--from 0] [--hut-range 30000] [--seeds 1]           seeds with a quad monument at 0,0 and a quad witch hut near
               seedfinder roof <seed> [--shape 3x3x2 | --pattern "?????,...,?????/..."]  nether roof bedrock spots (default: nether9's wither cage)
               seedfinder lowhuts <seed> [--radius 10000] [--max-y -50] [--any]        low huts near 0,0 in all 65,536 top-bit versions (--any: quad monument not needed)
+              seedfinder update                                                        download a newer version from GitHub (starts next time)
               seedfinder fortresses <seed> [--crossroads|--lines [--max-y 60] [--biome soul_sand_valley --biome-y 48-93 [--biome-whole]] [--overlap]]  most floor, joined crossroads, straight lines
 
             Options for all: --center x,z (default 0,0)  --radius blocks (default 50000)  --step blocks (biome grid, default 32)
@@ -76,6 +77,7 @@ final class Cli {
             return 0;
         }
         if (args[0].equals("screenshot")) return screenshot(args);
+        if (args[0].equals("update")) return update();
         String mode = args[0];
         if (args[0].matches("-?\\d+")) mode = "biomes"; // old style: just a seed
         else args = Arrays.copyOfRange(args, 1, args.length);
@@ -192,6 +194,27 @@ final class Cli {
                 dev.steelaspect.seedfinder.engine.GpuWorld.used() ? " (graphics card: " + dev.steelaspect.seedfinder.gpu.Gpu.status() + ")" : "");
         print(results);
         if (opt.containsKey("--verify")) return verify(results, Integer.parseInt(opt.get("--verify")), seed, opt.containsKey("--accept-eula"));
+        return 0;
+    }
+
+    /** Checks GitHub for a newer version and downloads it; the next start uses it. */
+    private static int update() throws Exception {
+        dev.steelaspect.seedfinder.store.Updater.Release r = dev.steelaspect.seedfinder.store.Updater.latest();
+        if (r == null) {
+            OUT.println("No release found on github.com/" + dev.steelaspect.seedfinder.store.Updater.REPO + " (you have " + SeedFinderApp.VERSION + ").");
+            return 0;
+        }
+        if (!r.newer()) {
+            OUT.println("You have the newest version (" + SeedFinderApp.VERSION + ").");
+            return 0;
+        }
+        if (r.ready()) {
+            OUT.println("Version " + r.version() + " is already downloaded; it starts next time.");
+            return 0;
+        }
+        OUT.println("Downloading version " + r.version() + " (you have " + SeedFinderApp.VERSION + ")...");
+        java.nio.file.Path dir = dev.steelaspect.seedfinder.store.Updater.install(r, (what, f) -> OUT.print("\r  " + what + " " + (int) (f * 100) + "%   "));
+        OUT.println("\nDone: " + dir + ". It starts the next time you run the Seed Finder.");
         return 0;
     }
 

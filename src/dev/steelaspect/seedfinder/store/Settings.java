@@ -56,6 +56,8 @@ public final class Settings {
     public Workers.Speed speed = Workers.Speed.BALANCED;
     /** Work out biomes on the graphics card (maps, biome and solid searches) when there is a usable one. */
     public boolean useGpu = true;
+    /** Look for a newer version on GitHub when the app starts. */
+    public boolean checkUpdates = true;
     /** Category used for /cway add commands. */
     public String cwayCategory = "seedfinder";
     /** Last values typed into each page, so they come back next time. */

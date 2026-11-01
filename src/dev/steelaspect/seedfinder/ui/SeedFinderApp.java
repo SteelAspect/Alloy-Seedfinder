@@ -13,6 +13,7 @@ import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
@@ -44,7 +45,7 @@ import java.util.Map;
 /** The main window: top bar with the seed, sidebar with the tools, and the current page. */
 public final class SeedFinderApp {
     public static final String NAME = "Alloy Seed Finder";
-    public static final String VERSION = "2.6.0";
+    public static final String VERSION = dev.steelaspect.seedfinder.launcher.Version.VALUE;
 
     private final Settings settings = Settings.load();
     private final JFrame frame = new JFrame(NAME);
@@ -59,6 +60,8 @@ public final class SeedFinderApp {
     private final JComboBox<Settings.Seed> seedBox;
     private JComboBox<Workers.Speed> speedBox;
     private final JLabel engine = Ui.muted("Loading the world generator…");
+    /** Shown when a newer version is out (or downloaded and waiting for a restart). */
+    private final Ui.FlatButton update = Ui.button("Update", "download", Ui.Kind.PRIMARY);
     private boolean updatingSeeds;
 
     public SeedFinderApp() {
@@ -119,6 +122,7 @@ public final class SeedFinderApp {
         seedsChanged();
         setSpeed(settings.speed);
         show("map");
+        if (settings.checkUpdates) checkForUpdate(null);
         warmUp();
     }
 
@@ -262,9 +266,76 @@ public final class SeedFinderApp {
                 .map(s -> "<b>" + s.label + "</b>: " + s.help).toList()) + "</html>");
         speed.addActionListener(e -> setSpeed((Workers.Speed) speed.getSelectedItem()));
         speedBox = speed;
-        JPanel right = Ui.row(10, engine, Ui.muted("   Speed"), speed, Ui.muted("  Seed"), seedBox, add);
+        update.setVisible(false);
+        update.addActionListener(e -> updateClicked());
+        JPanel right = Ui.row(10, update, engine, Ui.muted("   Speed"), speed, Ui.muted("  Seed"), seedBox, add);
         bar.add(right, BorderLayout.EAST);
         return bar;
+    }
+
+    private volatile dev.steelaspect.seedfinder.store.Updater.Release release;
+
+    /** Looks for a newer version in the background (Settings can turn this off); quiet if offline. */
+    public void checkForUpdate(java.util.function.Consumer<String> status) {
+        Thread t = new Thread(() -> {
+            String text;
+            try {
+                dev.steelaspect.seedfinder.store.Updater.Release r = dev.steelaspect.seedfinder.store.Updater.latest();
+                if (r != null && r.newer()) {
+                    release = r;
+                    SwingUtilities.invokeLater(() -> {
+                        update.setText(r.ready() ? "Restart for " + r.version() : "Update to " + r.version());
+                        update.setVisible(true);
+                    });
+                    text = "Version " + r.version() + " is out (you have " + VERSION + ").";
+                } else text = "You have the newest version (" + VERSION + ").";
+            } catch (Exception e) {
+                text = "Couldn't check for updates: " + (e.getMessage() == null ? e.toString() : e.getMessage());
+            }
+            if (status != null) {
+                String s = text;
+                SwingUtilities.invokeLater(() -> status.accept(s));
+            }
+        }, "update-check");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void updateClicked() {
+        dev.steelaspect.seedfinder.store.Updater.Release r = release;
+        if (r == null) return;
+        if (r.ready()) {
+            restartForUpdate(r);
+            return;
+        }
+        String notes = r.notes().isBlank() ? "" : "\n\n" + (r.notes().length() > 900 ? r.notes().substring(0, 900) + "…" : r.notes());
+        if (JOptionPane.showConfirmDialog(frame, "Download Alloy Seed Finder " + r.version() + "? You have " + VERSION + "." + notes,
+                "Update", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) return;
+        update.setEnabled(false);
+        Thread t = new Thread(() -> {
+            try {
+                dev.steelaspect.seedfinder.store.Updater.install(r, (what, f) -> SwingUtilities.invokeLater(() -> update.setText(what + " " + (int) (f * 100) + "%")));
+                SwingUtilities.invokeLater(() -> {
+                    update.setEnabled(true);
+                    update.setText("Restart for " + r.version());
+                    restartForUpdate(r);
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    update.setEnabled(true);
+                    update.setText("Update to " + r.version());
+                    JOptionPane.showMessageDialog(frame, "The update didn't work: " + e.getMessage(), "Update", JOptionPane.WARNING_MESSAGE);
+                });
+            }
+        }, "update-download");
+        t.start();
+    }
+
+    private void restartForUpdate(dev.steelaspect.seedfinder.store.Updater.Release r) {
+        if (JOptionPane.showConfirmDialog(frame, "Version " + r.version() + " is ready. Restart the Seed Finder now?", "Update",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) return;
+        if (!dev.steelaspect.seedfinder.store.Updater.restart())
+            JOptionPane.showMessageDialog(frame, "Close the Seed Finder and open it again to use " + r.version() + ".", "Update", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private final class Sidebar extends JPanel {

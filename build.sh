@@ -5,7 +5,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
-VERSION=$(grep -oP 'VERSION = "\K[^"]+' src/dev/steelaspect/seedfinder/ui/SeedFinderApp.java)
+VERSION=$(grep -oP 'VALUE = "\K[^"]+' src/dev/steelaspect/seedfinder/launcher/Version.java)
 JAVA_HOME="${JAVA_HOME:-$HOME/.local/share/PrismLauncher/java/java-runtime-delta}"
 J="$JAVA_HOME/bin"
 G="$HOME/.gradle/caches/modules-2/files-2.1"
@@ -85,4 +85,6 @@ with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
             with open(path, "rb") as fh:
                 z.writestr(info, fh.read())
 PY
-echo "Built dist/$NAME.zip ($(du -h "dist/$NAME.zip" | cut -f1))"
+# The updater checks downloads against this (upload it to the release next to the zip).
+(cd dist && sha256sum "$NAME.zip" > "$NAME.zip.sha256")
+echo "Built dist/$NAME.zip ($(du -h "dist/$NAME.zip" | cut -f1)) and its .sha256"

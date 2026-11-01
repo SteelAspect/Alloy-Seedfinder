@@ -28,6 +28,16 @@ public final class Boot {
             Class.forName("dev.steelaspect.seedfinder.Main").getMethod("main", String[].class).invoke(null, (Object) args);
             return;
         }
+        // A newer version downloaded by the updater: start that one (its own setup and launcher code, too).
+        if (System.getProperty("seedfinder.staged") == null) {
+            File newer = Updates.newest();
+            if (newer != null) {
+                System.setProperty("seedfinder.staged", newer.getPath());
+                URLClassLoader staged = new URLClassLoader("seedfinder-update", new URL[]{newer.toURI().toURL()}, ClassLoader.getPlatformClassLoader());
+                staged.loadClass("dev.steelaspect.seedfinder.launcher.Boot").getMethod("main", String[].class).invoke(null, (Object) args);
+                return;
+            }
+        }
         Setup setup = new Setup();
         if (!setup.ready()) {
             if (cli || GraphicsEnvironment.isHeadless()) {
