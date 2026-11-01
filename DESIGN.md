@@ -1,4 +1,4 @@
-# 2.6.0: everything the CLI can find, in the app
+# 2.6.0: everything the CLI can find, in the app (done: released as 2.6.0)
 
 Goal: someone with only the zip can find what the owner found by hand on 2026-10-23 .. 11-01 (quad seeds, low huts,
 joined crossroads in one biome, overlapping fortresses, world-border corner farms, roof shapes), without the CLI.

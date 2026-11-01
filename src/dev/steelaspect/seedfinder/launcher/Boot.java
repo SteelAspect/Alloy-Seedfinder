@@ -74,12 +74,4 @@ public final class Boot {
         }
     }
 
-    /** The folder the app's jar is in (the zip's folder). */
-    static File home() {
-        try {
-            return new File(Boot.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getParentFile();
-        } catch (Exception e) {
-            return new File(".");
-        }
-    }
 }

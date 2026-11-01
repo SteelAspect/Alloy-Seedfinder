@@ -62,13 +62,6 @@ public final class Mc {
         return lookup;
     }
 
-    /** All biome ids of a dimension's biome list, e.g. "badlands", in registry order. */
-    public static List<String> biomeNames() {
-        List<String> names = new ArrayList<>();
-        lookup().lookupOrThrow(Registries.BIOME).listElementIds().forEach(k -> names.add(k.identifier().getPath()));
-        return names;
-    }
-
     /**
      * The code-built registries have no tags (those come from data files), but structure biome checks need them.
      * Reads data/minecraft/tags/worldgen/biome from the game jar and binds them to the biome holders.

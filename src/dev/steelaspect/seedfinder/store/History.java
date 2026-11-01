@@ -29,9 +29,6 @@ public final class History {
         public List<Result> results;
         transient Path file;
 
-        public Path file() {
-            return file;
-        }
     }
 
     private History() {}

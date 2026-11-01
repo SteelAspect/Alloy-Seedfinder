@@ -119,11 +119,6 @@ public final class WorldGen {
         return CAVE_BIOMES.contains(b) ? biomeAt(x, z) : b;
     }
 
-    /** The preliminary surface level at (x, z) (the height biomeAt reads the biome at, before the sea level floor). */
-    public double surfaceLevel(int x, int z) {
-        return surface.compute(new DensityFunction.SinglePointContext(x, 0, z));
-    }
-
     /** Underground biomes that y 64 can land in under mountains (the map then reads the surface instead). */
     public static boolean isCaveBiome(String biome) {
         return CAVE_BIOMES.contains(biome);

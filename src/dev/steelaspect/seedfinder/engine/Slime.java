@@ -166,12 +166,6 @@ public final class Slime {
             return w[(oz * 16 + ox) * CELLS + (dz + REACH) * SIDE + dx + REACH];
         }
 
-        /** A full floor: every block counted. */
-        public int full(int ox, int oz) {
-            int t = 0;
-            for (int v : weight[oz * 16 + ox]) t += v;
-            return t;
-        }
     }
 
     private static final Weights[] WEIGHTS = new Weights[Stand.values().length];

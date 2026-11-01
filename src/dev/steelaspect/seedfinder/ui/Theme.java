@@ -9,7 +9,6 @@ import javax.swing.plaf.metal.MetalLookAndFeel;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
-import java.awt.Insets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -115,7 +114,4 @@ public final class Theme {
         c.setBorder(BorderFactory.createEmptyBorder(top, left, bottom, right));
     }
 
-    public static Insets insets(int v, int h) {
-        return new Insets(v, h, v, h);
-    }
 }

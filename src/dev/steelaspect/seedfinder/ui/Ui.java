@@ -1,6 +1,5 @@
 package dev.steelaspect.seedfinder.ui;
 
-import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -13,7 +12,6 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.ListCellRenderer;
-import javax.swing.SwingConstants;
 import javax.swing.border.AbstractBorder;
 import javax.swing.plaf.basic.BasicComboBoxUI;
 import javax.swing.plaf.basic.BasicScrollBarUI;
@@ -24,7 +22,6 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
@@ -445,24 +442,6 @@ public final class Ui {
         }
     }
 
-    /** A small coloured pill, e.g. "verified". */
-    public static JLabel pill(String text, Color color) {
-        JLabel l = new JLabel(text, SwingConstants.CENTER) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = smooth(g);
-                g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 45));
-                g2.fill(new RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), getHeight(), getHeight()));
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        l.setForeground(color);
-        l.setFont(Theme.FONT_SMALL.deriveFont(Font.BOLD));
-        l.setBorder(BorderFactory.createEmptyBorder(2, 9, 2, 9));
-        return l;
-    }
-
     /** Labelled form field: small grey label over the input. */
     public static JPanel labelled(String label, JComponent input) {
         JPanel p = clear(new BorderLayout(0, 5));
@@ -471,7 +450,4 @@ public final class Ui {
         return p;
     }
 
-    public static void hand(AbstractButton b) {
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    }
 }

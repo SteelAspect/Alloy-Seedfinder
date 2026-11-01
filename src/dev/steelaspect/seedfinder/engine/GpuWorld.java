@@ -323,8 +323,4 @@ public final class GpuWorld {
         return checked + " spots, all the same as Minecraft";
     }
 
-    /** For tests: the biome holder of a leaf. */
-    Holder<Biome> leafBiome(int leaf) {
-        return code.leaves.get(leaf);
-    }
 }
