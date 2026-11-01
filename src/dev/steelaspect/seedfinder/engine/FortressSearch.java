@@ -126,6 +126,10 @@ public final class FortressSearch {
                 ChunkPos chunk = Structures.chunkIn(placement, w.seed, rx, rz);
                 int x = chunk.getMinBlockX(), z = chunk.getMinBlockZ();
                 if (!p.area().inside(x, z) || Math.max(Math.abs(x), Math.abs(z)) < p.minDist()) continue;
+                // Whole fortress in one biome: its start piece (around this chunk's middle) must be too, so check that
+                // column first and skip building fortresses that can't pass.
+                if (p.biome() != null && p.biomeWhole() && !inBiome(w, List.of(new BoundingBox(x + 7, 0, z + 7, x + 9, 0, z + 9)), p.biome(), p.biomeFrom(), p.biomeTo()))
+                    continue;
                 if (!isFortress(w, chunk, starts, bastion)) continue;
                 List<StructurePiece> pieceList;
                 if (serial || !FortressBuilder.AVAILABLE) {
@@ -284,19 +288,19 @@ public final class FortressSearch {
         return out;
     }
 
-    /** True if the biome is the same everywhere in these boxes (sideways), every 4 blocks, at every height from y0 to y1. */
+    /**
+     * True if the biome is the same everywhere in these boxes (sideways) at every height from y0 to y1. The game keeps
+     * one biome per 4x4x4 cell, so each cell the boxes touch is looked at once, even where boxes overlap.
+     */
     private static boolean inBiome(WorldGen w, List<BoundingBox> boxes, String biome, int y0, int y1) {
+        java.util.Set<Long> columns = new java.util.LinkedHashSet<>();
         for (BoundingBox b : boxes)
-            for (int y = y0; ; y = Math.min(y + 4, y1)) {
-                for (int x = b.minX(); ; x = Math.min(x + 4, b.maxX())) {
-                    for (int z = b.minZ(); ; z = Math.min(z + 4, b.maxZ())) {
-                        if (!w.name(w.biome(x, y, z)).equals(biome)) return false;
-                        if (z == b.maxZ()) break;
-                    }
-                    if (x == b.maxX()) break;
-                }
-                if (y == y1) break;
-            }
+            for (int qx = b.minX() >> 2; qx <= b.maxX() >> 2; qx++)
+                for (int qz = b.minZ() >> 2; qz <= b.maxZ() >> 2; qz++) columns.add((long) qx << 32 | (qz & 0xFFFFFFFFL));
+        // Layer by layer, so a fortress that leaves the biome anywhere fails early.
+        for (int qy = y0 >> 2; qy <= y1 >> 2; qy++)
+            for (long c : columns)
+                if (!w.name(w.biome((int) (c >> 32) << 2, qy << 2, (int) c << 2)).equals(biome)) return false;
         return true;
     }
 
