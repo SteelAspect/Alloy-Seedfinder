@@ -47,7 +47,14 @@ public final class SeedFinderApp {
     public static final String NAME = "Alloy Seed Finder";
     public static final String VERSION = dev.steelaspect.seedfinder.launcher.Version.VALUE;
 
-    private final Settings settings = Settings.load();
+    private final Settings settings = withGpuApi(Settings.load());
+
+    /** OpenCL or CUDA, before anything opens the graphics card (--gpu-api or SEEDFINDER_GPU from outside win). */
+    private static Settings withGpuApi(Settings s) {
+        if (System.getProperty("seedfinder.gpu") == null && System.getenv("SEEDFINDER_GPU") == null && s.gpuApi != null)
+            System.setProperty("seedfinder.gpu", s.gpuApi);
+        return s;
+    }
     private final JFrame frame = new JFrame(NAME);
     private final CardLayout cards = new CardLayout();
     private final JPanel content = new JPanel(cards);

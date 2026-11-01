@@ -115,6 +115,18 @@ public final class GpuWorld {
         return lastProblem;
     }
 
+    /** For a tester: builds the card's world generator for this seed (overworld and nether) and reports its self-checks. */
+    public static String selfTest(long seed) {
+        StringBuilder b = new StringBuilder();
+        for (Dim d : new Dim[]{Dim.OVERWORLD, Dim.NETHER}) {
+            GpuWorld g = of(WorldGen.of(seed, d, WorldType.NORMAL));
+            if (b.length() > 0) b.append(" · ");
+            b.append(d).append(": ").append(g == null ? "FAILED: " + lastProblem : g.check);
+        }
+        String r = b.toString();
+        return (r.contains("FAILED") ? "" : "ok · ") + r;
+    }
+
     /** The GPU version of this world, or null (no card, switched off, End, or the self-check found a difference). */
     public static GpuWorld of(WorldGen w) {
         if (!enabled || w.dim == Dim.END) return null;

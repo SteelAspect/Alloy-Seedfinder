@@ -34,13 +34,17 @@ if [ ! -f "$OUT/.built" ] || [ -n "$(find "$DIR/src" "$DIR/src-ffm" -name '*.jav
   # The graphics card code (src-ffm), once per Java: a Java 21 preview build, and a Java 22+ build if there's a newer JDK.
   GPU_TMP=$(mktemp -d)
   mkdir -p "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21"
-  sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm21;/' "$DIR/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/OpenClFfm.java" > "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
-  "$JAVA_HOME/bin/javac" -nowarn -XDsuppressNotes --release 21 --enable-preview -d "$OUT" -cp "$OUT" "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/OpenClFfm.java"
+  for f in "$DIR"/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/*.java; do
+    sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm21;/' "$f" > "$GPU_TMP/21/dev/steelaspect/seedfinder/gpu/ffm21/$(basename "$f")"
+  done
+  "$JAVA_HOME/bin/javac" -nowarn -XDsuppressNotes --release 21 --enable-preview -d "$OUT" -cp "$OUT" "$GPU_TMP"/21/dev/steelaspect/seedfinder/gpu/ffm21/*.java
   JDK22=$(for j in /usr/lib/jvm/*/bin/javac; do v=$("$j" -version 2>&1 | grep -oP '\d+' | head -1); [ "${v:-0}" -ge 22 ] && echo "$j" && break; done || true)
   if [ -n "$JDK22" ]; then
     mkdir -p "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22"
-    sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm22;/' "$DIR/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/OpenClFfm.java" > "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
-    "$JDK22" -nowarn --release 22 -d "$OUT" -cp "$OUT" "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/OpenClFfm.java"
+    for f in "$DIR"/src-ffm/dev/steelaspect/seedfinder/gpu/ffm/*.java; do
+      sed 's/^package dev.steelaspect.seedfinder.gpu.ffm;/package dev.steelaspect.seedfinder.gpu.ffm22;/' "$f" > "$GPU_TMP/22/dev/steelaspect/seedfinder/gpu/ffm22/$(basename "$f")"
+    done
+    "$JDK22" -nowarn --release 22 -d "$OUT" -cp "$OUT" "$GPU_TMP"/22/dev/steelaspect/seedfinder/gpu/ffm22/*.java
   fi
   rm -rf "$GPU_TMP"
   cp "$DIR"/resources/* "$OUT/"

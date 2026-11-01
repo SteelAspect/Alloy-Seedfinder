@@ -66,6 +66,7 @@ final class Cli {
                              --serial-fortresses   build fortresses one at a time the old way (same results, slower)
                              --exact   skip the quick first pass for biome/solid searches (same results, about 2x slower)
                              --cpu     don't use the graphics card (same results, slower)
+                             --gpu-api auto|opencl|cuda   how to reach the graphics card (auto: OpenCL, then CUDA)
                              --verify n --accept-eula   check the first n results on a real server (accepts the Minecraft EULA)
             """;
 
@@ -78,6 +79,7 @@ final class Cli {
         }
         if (args[0].equals("screenshot")) return screenshot(args);
         if (args[0].equals("update")) return update();
+        if (args[0].equals("gpu")) return gpuReport(args);
         String mode = args[0];
         if (args[0].matches("-?\\d+")) mode = "biomes"; // old style: just a seed
         else args = Arrays.copyOfRange(args, 1, args.length);
@@ -102,6 +104,7 @@ final class Cli {
             else if (a.equals("--nether") || a.equals("--any") || a.equals("--biome-whole") || a.equals("--overlap") || a.equals("--lines") || a.equals("--crossroads") || a.equals("--joined") || a.equals("--accept-eula") || a.equals("--no-biomes")) opt.put(a, "true");
             else if (a.equals("--exact")) BiomeSearch.forceFullExact = true;
             else if (a.equals("--cpu")) cpuOnly = true;
+            else if (a.equals("--gpu-api") && i + 1 < args.length) System.setProperty("seedfinder.gpu", args[++i]);
             else if (a.equals("--serial-fortresses")) FortressSearch.serial = true;
             else if (a.equals("--speed") && i + 1 < args.length) Workers.set(Workers.Speed.valueOf(args[++i].toUpperCase(Locale.ROOT)));
             else if (a.startsWith("--") && i + 1 < args.length) opt.put(a, args[++i]);
@@ -195,6 +198,26 @@ final class Cli {
         print(results);
         if (opt.containsKey("--verify")) return verify(results, Integer.parseInt(opt.get("--verify")), seed, opt.containsKey("--accept-eula"));
         return 0;
+    }
+
+    /** What the graphics card can do here, for a tester's report: which API, which card, and every self-check. */
+    private static int gpuReport(String[] args) {
+        for (int i = 1; i + 1 < args.length; i++) if (args[i].equals("--gpu-api")) System.setProperty("seedfinder.gpu", args[i + 1]);
+        OUT.println("Alloy Seed Finder " + SeedFinderApp.VERSION + " · Java " + Runtime.version() + " · " + System.getProperty("os.name") + " " + System.getProperty("os.arch"));
+        OUT.println("API: " + dev.steelaspect.seedfinder.gpu.Gpu.api());
+        dev.steelaspect.seedfinder.gpu.OpenCl cl = dev.steelaspect.seedfinder.gpu.Gpu.get();
+        OUT.println("Card: " + dev.steelaspect.seedfinder.gpu.Gpu.status());
+        if (cl == null) return 1;
+        try {
+            OUT.println("Details: " + cl.getClass().getMethod("details").invoke(cl));
+        } catch (ReflectiveOperationException ignored) {
+            // OpenCL has no details call
+        }
+        OUT.println("Loading the Minecraft 1.21.11 world generator and checking the card against it...");
+        dev.steelaspect.seedfinder.engine.GpuWorld.setEnabled(true);
+        String check = dev.steelaspect.seedfinder.engine.GpuWorld.selfTest(12345L);
+        OUT.println("World generation (biomes): " + check);
+        return check.startsWith("ok") ? 0 : 1;
     }
 
     /** Checks GitHub for a newer version and downloads it; the next start uses it. */

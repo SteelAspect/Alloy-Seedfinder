@@ -54,11 +54,12 @@ final class SettingsPage extends JPanel {
         column.add(section("Map", "Map tiles you've looked at are kept on disk so they draw instantly next time (up to "
                 + TileCache.LIMIT / 1024 / 1024 + " MB, oldest removed first).", mapPanel()));
         column.add(gap());
-        column.add(section("Graphics card", "Biomes for the map and for biome and solid searches can be worked out on the graphics card: "
-                + "the game's own generator rebuilt for it, checked against Minecraft before it's used. Not used at Light speed.", gpuPanel()));
+        column.add(section("Graphics card", "Biomes for the map and for biome and solid searches can be worked out on the graphics card:\n"
+                + "the game's own generator rebuilt for it, checked against Minecraft before it's used. Not used at Light speed.\n"
+                + "OpenCL works on AMD, NVIDIA and Intel cards; CUDA is for NVIDIA cards whose OpenCL doesn't work.", gpuPanel()));
         column.add(gap());
-        column.add(section("Updates", "Version " + dev.steelaspect.seedfinder.ui.SeedFinderApp.VERSION + ". New versions come from github.com/"
-                + dev.steelaspect.seedfinder.store.Updater.REPO + " (checked against their checksum) and start the next time you open the app.", updatesPanel()));
+        column.add(section("Updates", "Version " + dev.steelaspect.seedfinder.ui.SeedFinderApp.VERSION + ". New versions come from github.com/" + dev.steelaspect.seedfinder.store.Updater.REPO
+                + ",\nchecked against their checksum, and start the next time you open the app.", updatesPanel()));
         column.add(gap());
         column.add(section("Files", "Settings: " + Settings.FILE + "\nSaved results: " + History.DIR + "\nMap cache: " + TileCache.DIR, null));
         JPanel holder = Ui.clear(new BorderLayout());
@@ -195,8 +196,18 @@ final class SettingsPage extends JPanel {
             app.applyGpu();
             showGpu();
         });
+        javax.swing.JComboBox<String> api = Ui.combo(new String[]{"Auto (OpenCL, then CUDA)", "OpenCL", "CUDA (NVIDIA, needs the CUDA Toolkit)"});
+        String now = app.settings().gpuApi == null ? "auto" : app.settings().gpuApi;
+        api.setSelectedIndex(now.equals("opencl") ? 1 : now.equals("cuda") ? 2 : 0);
+        api.setPreferredSize(new java.awt.Dimension(300, 34));
+        api.addActionListener(e -> {
+            app.settings().gpuApi = new String[]{"auto", "opencl", "cuda"}[api.getSelectedIndex()];
+            app.settings().save();
+            gpuStatus.setText("Restart the Seed Finder to switch to " + api.getSelectedItem() + ".");
+        });
         JPanel p = Ui.clear(new java.awt.GridLayout(0, 1, 0, 8));
         p.add(useGpu);
+        p.add(Ui.row(10, Ui.muted("Talk to the card with"), api));
         p.add(gpuStatus);
         return p;
     }
