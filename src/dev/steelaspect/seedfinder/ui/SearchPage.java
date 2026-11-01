@@ -11,6 +11,7 @@ import dev.steelaspect.seedfinder.store.Settings;
 import dev.steelaspect.seedfinder.verify.Verifier;
 
 import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -32,6 +33,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
+import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -78,8 +80,10 @@ public abstract class SearchPage extends JPanel {
     private final ResultsTable table = new ResultsTable();
     protected final MapView map = new MapView();
     private final Ui.Progress bar = new Ui.Progress();
-    private final JLabel status = Ui.muted(" ");
-    private final JLabel empty = new JLabel("", SwingConstants.CENTER);
+    private final Ui.Label empty = Ui.muted("");
+    private final Ui.Tile tileFound = new Ui.Tile("Results"), tileSelected = new Ui.Tile("Selected"), tileSize = new Ui.Tile("Size");
+    private final Ui.Label mapDim = Ui.muted(" ");
+    private String tileNote = "";
     private final Ui.FlatButton search = Ui.button("Search", "play", Ui.Kind.PRIMARY);
     private final Ui.FlatButton stop = Ui.button("Stop", "stop", Ui.Kind.SECONDARY);
     private final List<JComponent> resultActions = new ArrayList<>();
@@ -88,22 +92,20 @@ public abstract class SearchPage extends JPanel {
     private History.Entry current;
 
     protected SearchPage(SeedFinderApp app, String id, String title, String subtitle) {
-        super(new BorderLayout(0, 14));
+        super(new BorderLayout(12, 0));
         this.app = app;
         this.id = id;
         this.title = title;
         this.subtitle = subtitle;
         setOpaque(false);
-        Theme.pad(this, 20, 22, 18, 22);
+        Theme.pad(this, 12, 14, 12, 14);
     }
 
     /** Builds the page; called once by the app after construction. */
     final void build() {
-        JPanel head = Ui.clear(new BorderLayout(0, 3));
-        head.add(Ui.title(title), BorderLayout.NORTH);
-        head.add(Ui.muted(subtitle), BorderLayout.SOUTH);
-
-        JPanel form = Ui.clear(new WrapLayout(12, 4));
+        // Left: the form card with Search at its bottom. Centre: the stat tiles, then the map and the results.
+        JPanel form = Ui.clear(new Ui.Stack(10));
+        form.add(Ui.paragraph(subtitle));
         buildForm(form);
         restore();
         stop.setVisible(false);
@@ -112,32 +114,31 @@ public abstract class SearchPage extends JPanel {
             cancelled = true;
             setStatus("Stopping…", Theme.TEXT2);
         });
-        JPanel buttons = Ui.clear(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        buttons.add(stop);
+        JPanel buttons = Ui.clear(new Ui.Stack(8));
         buttons.add(search);
-        JPanel formRow = Ui.clear(new BorderLayout(16, 0));
-        formRow.add(form, BorderLayout.CENTER);
-        JPanel bw = Ui.clear(new BorderLayout());
-        bw.add(buttons, BorderLayout.SOUTH);
-        formRow.add(bw, BorderLayout.EAST);
-        Ui.Card formCard = new Ui.Card(new BorderLayout(0, 12));
-        formCard.add(formRow, BorderLayout.CENTER);
-        JPanel progressRow = Ui.clear(new BorderLayout(12, 0));
-        bar.setPreferredSize(new Dimension(220, 6));
-        JPanel barWrap = Ui.clear(new java.awt.GridBagLayout());
-        barWrap.add(bar);
-        progressRow.add(barWrap, BorderLayout.WEST);
-        progressRow.add(status, BorderLayout.CENTER);
-        formCard.add(progressRow, BorderLayout.SOUTH);
+        buttons.add(stop);
+        bar.setPreferredSize(new Dimension(100, 4));
+        buttons.add(bar);
+        Theme.pad(buttons, 10, 0, 0, 0);
+        Ui.Card formCard = new Ui.Card(title, new BorderLayout(0, 0));
+        JPanel formHolder = Ui.clear(new BorderLayout());
+        formHolder.add(form, BorderLayout.NORTH);
+        JScrollPane formScroll = Ui.scroll(formHolder);
+        formScroll.getViewport().setOpaque(false);
+        formScroll.setOpaque(false);
+        formCard.add(formScroll, BorderLayout.CENTER);
+        formCard.add(buttons, BorderLayout.SOUTH);
+        formCard.setPreferredSize(new Dimension(330, 100));
+        add(formCard, BorderLayout.WEST);
 
-        JPanel top = Ui.clear(new BorderLayout(0, 14));
-        top.add(head, BorderLayout.NORTH);
-        top.add(formCard, BorderLayout.CENTER);
-        add(top, BorderLayout.NORTH);
+        JPanel tiles = Ui.clear(new GridLayout(1, 3, 10, 0));
+        tiles.add(tileFound);
+        tiles.add(tileSelected);
+        tiles.add(tileSize);
 
-        // Results (left) and map (right).
-        Ui.Card resultsCard = new Ui.Card(new BorderLayout(0, 10));
-        Theme.pad(resultsCard, 6, 6, 10, 6);
+        // Results: the table flush to the card's edges, the actions under it.
+        Ui.Card resultsCard = new Ui.Card("Results", new BorderLayout(0, 8));
+        resultsCard.setBorder(BorderFactory.createEmptyBorder(Ui.Card.TITLE_H + 1, 1, 10, 1));
         JScrollPane scroll = Ui.scroll(table);
         JLayeredPane layered = new JLayeredPane() {
             @Override
@@ -145,20 +146,34 @@ public abstract class SearchPage extends JPanel {
                 for (Component c : getComponents()) c.setBounds(0, 0, getWidth(), getHeight());
             }
         };
-        empty.setForeground(Theme.TEXT3);
+        empty.role(() -> Theme.TEXT3);
+        empty.setHorizontalAlignment(SwingConstants.CENTER);
         empty.setFont(Theme.FONT);
         layered.add(scroll, JLayeredPane.DEFAULT_LAYER);
         layered.add(empty, JLayeredPane.PALETTE_LAYER);
         resultsCard.add(layered, BorderLayout.CENTER);
-        resultsCard.add(actions(), BorderLayout.SOUTH);
+        JPanel acts = actions();
+        Theme.pad(acts, 0, 8, 0, 8);
+        resultsCard.add(acts, BorderLayout.SOUTH);
 
-        JPanel mapWrap = Ui.clear(new BorderLayout());
-        mapWrap.add(map, BorderLayout.CENTER);
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, resultsCard, mapWrap);
-        split.setResizeWeight(0.55);
+        // The map, with a legend bar like SlimeByte's.
+        Ui.Card mapCard = new Ui.Card("Map", new BorderLayout(0, 6));
+        mapCard.setBorder(BorderFactory.createEmptyBorder(Ui.Card.TITLE_H + 1, 1, 8, 1));
+        mapCard.add(map, BorderLayout.CENTER);
+        JPanel legend = Ui.row(16, Ui.legend(() -> Theme.MAP_TEXT, "result", true), Ui.legend(() -> Theme.MAP_ACCENT, "selected", true),
+                Ui.legend(() -> Theme.MAP_VIOLET, "search area", false));
+        JPanel legendRow = Ui.clear(new BorderLayout());
+        Theme.pad(legendRow, 0, 10, 0, 14);
+        legendRow.add(legend, BorderLayout.WEST);
+        legendRow.add(mapDim, BorderLayout.EAST);
+        mapCard.add(legendRow, BorderLayout.SOUTH);
+        mapDim.setText(dim().label);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, mapCard, resultsCard);
+        split.setResizeWeight(0.5);
         split.setBorder(null);
         split.setOpaque(false);
-        split.setDividerSize(14);
+        split.setDividerSize(12);
         split.setUI(new BasicSplitPaneUI() {
             @Override
             public BasicSplitPaneDivider createDefaultDivider() {
@@ -171,7 +186,10 @@ public abstract class SearchPage extends JPanel {
                 };
             }
         });
-        add(split, BorderLayout.CENTER);
+        JPanel centre = Ui.clear(new BorderLayout(0, 12));
+        centre.add(tiles, BorderLayout.NORTH);
+        centre.add(split, BorderLayout.CENTER);
+        add(centre, BorderLayout.CENTER);
 
         table.onSelect(i -> {
             List<Result> rs = table.results();
@@ -183,6 +201,7 @@ public abstract class SearchPage extends JPanel {
             map.select(i);
             // Slime farms: zoom in far enough to see the chunks around the AFK spot.
             if (slimeChunks() && r != null) map.centerOn(r.x, r.z, 160);
+            updateTiles();
         });
         map.onSelect(table::selectRow);
         map.onStatus(s -> setStatus(s, Theme.TEXT2));
@@ -195,6 +214,26 @@ public abstract class SearchPage extends JPanel {
         });
         showResults(List.of());
         setEmpty(emptyText());
+    }
+
+    /** The three tiles over the map: how many results, the chosen one, and its size. */
+    private void updateTiles() {
+        List<Result> rs = table.results();
+        tileFound.set(rs.isEmpty() ? "–" : Integer.toString(rs.size()), tileNote);
+        Result r = table.selected();
+        if (r == null && !rs.isEmpty()) r = rs.get(0);
+        tileSize.label(table.sizeName());
+        if (r == null) {
+            tileSelected.set("–", rs.isEmpty() ? "" : "pick a row");
+            tileSize.set("–", "");
+            mapDim.setText(dim().label);
+            return;
+        }
+        int rank = rs.indexOf(r) + 1;
+        String dist = r.details.get("Distance");
+        tileSelected.set(r.x + ", " + r.y + ", " + r.z, "#" + rank + "  " + r.name + (dist != null ? "  ·  " + dist + " from the centre" : ""));
+        tileSize.set(r.size, r.verified == null || r.verified.isEmpty() ? "" : "verify: " + r.verified);
+        mapDim.setText(r.dim != null ? r.dim.label : dim().label);
     }
 
     // ------------------------------------------------------------------ for subclasses
@@ -357,7 +396,7 @@ public abstract class SearchPage extends JPanel {
         search.setVisible(false);
         stop.setVisible(true);
         setActionsEnabled(false);
-        bar.set(0, Theme.ACCENT);
+        bar.set(0, () -> Theme.ACCENT);
         setEmpty("Searching…");
         long started = System.nanoTime();
         Progress progress = new Progress() {
@@ -370,7 +409,7 @@ public abstract class SearchPage extends JPanel {
                 last = now;
                 SwingUtilities.invokeLater(() -> {
                     if (!busy) return;
-                    bar.set(fraction, Theme.ACCENT);
+                    bar.set(fraction, () -> Theme.ACCENT);
                     setStatus(message + "  ·  " + elapsed(started), Theme.TEXT2);
                 });
             }
@@ -421,14 +460,15 @@ public abstract class SearchPage extends JPanel {
         search.setVisible(true);
         stop.setVisible(false);
         if (error != null) {
-            bar.set(0, Theme.ACCENT);
+            bar.set(0, () -> Theme.ACCENT);
             setStatus(error, error.equals("Stopped") ? Theme.TEXT2 : Theme.DANGER);
             setEmpty(table.results().isEmpty() ? emptyText() : "");
             setActionsEnabled(!table.results().isEmpty());
             return;
         }
-        bar.set(1, Theme.SUCCESS);
+        bar.set(1, () -> Theme.SUCCESS);
         String msg = results.isEmpty() ? "Nothing found" : "Found " + results.size() + (note != null && !note.equals("Done") ? "  ·  " + note : "");
+        tileNote = (note != null && !note.equals("Done") ? note + "  ·  " : "") + String.format(Locale.ROOT, "%.1f s", seconds);
         setStatus(msg + "  ·  " + String.format(Locale.ROOT, "%.1f s", seconds), results.isEmpty() ? Theme.WARNING : Theme.TEXT2);
         showResults(results);
         map.fit();
@@ -459,6 +499,7 @@ public abstract class SearchPage extends JPanel {
         map.setResults(results);
         setEmpty(results.isEmpty() ? (busy ? "Searching…" : emptyText()) : "");
         setActionsEnabled(!results.isEmpty());
+        updateTiles();
     }
 
     private void setEmpty(String text) {
@@ -467,8 +508,7 @@ public abstract class SearchPage extends JPanel {
     }
 
     protected void setStatus(String text, Color color) {
-        status.setText(text);
-        status.setForeground(color);
+        app.status(text, color);
     }
 
     /** Called when the seed in the top bar changes. */
@@ -502,7 +542,7 @@ public abstract class SearchPage extends JPanel {
         current = e;
         showResults(e.results);
         SwingUtilities.invokeLater(map::fit);
-        bar.set(1, Theme.SUCCESS);
+        bar.set(1, () -> Theme.SUCCESS);
         setStatus("Saved search from " + new java.text.SimpleDateFormat("d MMM yyyy, HH:mm").format(new java.util.Date(e.time))
                 + "  ·  seed " + e.seedName, Theme.TEXT2);
     }
@@ -730,50 +770,5 @@ public abstract class SearchPage extends JPanel {
         }, "verify-" + id);
         t.setDaemon(true);
         t.start();
-    }
-
-    /** A left-aligned flow that wraps onto more rows when the fields don't fit, and asks for the height that takes. */
-    static final class WrapLayout extends FlowLayout {
-        WrapLayout(int hgap, int vgap) {
-            super(FlowLayout.LEFT, hgap, vgap);
-        }
-
-        @Override
-        public Dimension preferredLayoutSize(java.awt.Container target) {
-            return size(target, true);
-        }
-
-        @Override
-        public Dimension minimumLayoutSize(java.awt.Container target) {
-            Dimension d = size(target, false);
-            d.width = 0;
-            return d;
-        }
-
-        private Dimension size(java.awt.Container target, boolean preferred) {
-            synchronized (target.getTreeLock()) {
-                // The width the form really gets (its parent's), or a wide default before the first layout.
-                int width = target.getWidth() > 0 ? target.getWidth() : target.getParent() != null && target.getParent().getWidth() > 0
-                        ? target.getParent().getWidth() : 1200;
-                java.awt.Insets in = target.getInsets();
-                int max = width - in.left - in.right, rowW = 0, rowH = 0, w = 0, h = 0;
-                for (Component c : target.getComponents()) {
-                    if (!c.isVisible()) continue;
-                    Dimension d = preferred ? c.getPreferredSize() : c.getMinimumSize();
-                    if (rowW > 0 && rowW + getHgap() + d.width > max) {
-                        w = Math.max(w, rowW);
-                        h += rowH + getVgap();
-                        rowW = 0;
-                        rowH = 0;
-                    }
-                    rowW += (rowW > 0 ? getHgap() : 0) + d.width;
-                    rowH = Math.max(rowH, d.height);
-                }
-                w = Math.max(w, rowW);
-                // FlowLayout also puts a gap above the first row and below the last.
-                h += rowH + 2 * getVgap();
-                return new Dimension(w + in.left + in.right, h + in.top + in.bottom);
-            }
-        }
     }
 }

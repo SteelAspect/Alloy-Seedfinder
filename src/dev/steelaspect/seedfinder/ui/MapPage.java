@@ -50,7 +50,7 @@ final class MapPage extends JPanel {
         super(new BorderLayout(0, 14));
         this.app = app;
         setOpaque(false);
-        Theme.pad(this, 20, 22, 18, 22);
+        Theme.pad(this, 12, 14, 12, 14);
 
         JPanel head = Ui.clear(new BorderLayout(0, 3));
         head.add(Ui.title("Map"), BorderLayout.NORTH);
@@ -101,22 +101,16 @@ final class MapPage extends JPanel {
         Ui.FlatButton none = Ui.button("None", null, Ui.Kind.GHOST);
         all.addActionListener(e -> setAll(true));
         none.addActionListener(e -> setAll(false));
-        Ui.Card side = new Ui.Card(new BorderLayout(0, 10));
-        side.setPreferredSize(new Dimension(230, 100));
-        JLabel title = Ui.label("Structures");
-        title.setFont(Theme.FONT_BOLD);
-        JPanel sideHead = Ui.clear(new BorderLayout());
-        sideHead.add(title, BorderLayout.WEST);
-        sideHead.add(Ui.row(0, all, none), BorderLayout.EAST);
-        side.add(sideHead, BorderLayout.NORTH);
+        Ui.Card side = new Ui.Card("Structures", new BorderLayout(0, 10));
+        side.setPreferredSize(new Dimension(240, 100));
+        side.titleRight(Ui.row(0, all, none));
         JPanel listHolder = Ui.clear(new BorderLayout());
         listHolder.add(layerList, BorderLayout.NORTH);
         javax.swing.JScrollPane scroll = Ui.scroll(listHolder);
         scroll.getViewport().setOpaque(false);
         scroll.setOpaque(false);
         side.add(scroll, BorderLayout.CENTER);
-        JLabel overlays = Ui.label("Overlays");
-        overlays.setFont(Theme.FONT_BOLD);
+        JLabel overlays = Ui.strong("Overlays");
         JPanel bottom = Ui.clear(null);
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
         for (JComponent c : new JComponent[]{overlays, slime, grid, Ui.muted("<html>Positions use the game's own<br>placement and biome checks.</html>")}) {

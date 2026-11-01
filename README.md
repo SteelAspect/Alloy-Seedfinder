@@ -29,7 +29,9 @@ sent in batches of about 40 ms so no driver watchdog resets the card. Tested on 
 The map can shade slime chunks and draw a chunk grid; clicking it shows the chunk, region file and nether/overworld
 coordinates.
 
-App: dark theme, saved seeds, zoomable biome map with numbered pins, Copy /tp, waypoints to Xaero's minimap
+App: the look of kyoubitt's [SlimeByte](https://github.com/kyoubitt/SlimeByte) (its colours come from the RedenMC
+slime farm generator): light and dark themes, monospace text, titled cards, tabs along the top, stat tiles over the
+map, key hints in the footer. Saved seeds, zoomable biome map with numbered pins, Copy /tp, waypoints to Xaero's minimap
 or `/cway add` commands, CSV and map image export, saved results, and a Speed setting (Fast / Balanced / Light).
 
 ## Sharing it
@@ -81,6 +83,12 @@ constant to the seed, so the card tries every structure seed for 4 monuments wit
 with one AFK spot within 128 of all 4 middles, looks for quad huts nearby, then tries all 65,536 top-bit versions with
 the game's own structure generation (all 4 huts in a swamp, all 4 monuments really generating). About 1 in 10 billion
 structure seeds has a quad monument; about 1 in 1,500 of those has a quad hut within 30k.
+
+Fortress groups (Fortresses, "Rank by overlapping fortresses", `fortresses --overlap`): groups of 3 or 4 fortresses
+whose boxes share a point or all lie within 128 blocks of one spot, rated like a single fortress's farm spot but on
+their pieces: the AFK spot whose range (24 to 128 blocks, NaturalSpawner's rule) holds the most piece blocks from all
+of them, next to the best one of them alone. On the SMP seed, 600k x 600k around 0,0 has 4,893 groups of 4 within
+reach and 2 whose boxes all overlap; the best gives about 2.9x the blocks of its best single fortress.
 
 Joined crossroads (Fortresses, "Rank by joined crossroads", `fortresses --crossroads [--max-y]`): the idea of
 Gaider10's [CrossroadFinder](https://github.com/Gaider10/CrossroadFinder) (web version by Mews): 4-way bridge crossings

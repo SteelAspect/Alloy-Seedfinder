@@ -30,7 +30,6 @@ public final class ResultsTable extends JTable {
         setShowGrid(false);
         setIntercellSpacing(new Dimension(0, 0));
         setFillsViewportHeight(true);
-        setBackground(Theme.PANEL);
         setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         setAutoCreateRowSorter(false);
         setAutoResizeMode(AUTO_RESIZE_SUBSEQUENT_COLUMNS);
@@ -52,6 +51,16 @@ public final class ResultsTable extends JTable {
         getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) onSelect.accept(getSelectedRow());
         });
+    }
+
+    @Override
+    public Color getBackground() {
+        return Theme.PANEL == null ? super.getBackground() : Theme.PANEL;
+    }
+
+    /** What the size column holds for these results ("Distance", "Floor area", ...). */
+    public String sizeName() {
+        return model.sizeName();
     }
 
     public void onSelect(IntConsumer listener) {
@@ -115,7 +124,7 @@ public final class ResultsTable extends JTable {
             setHorizontalAlignment(SwingConstants.LEFT);
             setFont(name.equals("Coords") ? Theme.FONT_MONO : Theme.FONT);
             setForeground(name.equals("#") ? Theme.TEXT3 : Theme.TEXT);
-            setBackground(selected ? Theme.SELECTED : stripe ? new Color(0x23272F) : Theme.PANEL);
+            setBackground(selected ? Theme.SELECTED : stripe ? Theme.PANEL2 : Theme.PANEL);
             if (name.equals("Check")) {
                 String v = value == null ? "" : value.toString();
                 setForeground(v.equals("ok") ? Theme.SUCCESS : v.isEmpty() ? Theme.TEXT3 : v.equals("checking") ? Theme.WARNING : Theme.DANGER);

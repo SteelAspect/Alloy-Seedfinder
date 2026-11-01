@@ -58,6 +58,8 @@ public final class Settings {
     public boolean useGpu = true;
     /** Graphics card API: "auto" (OpenCL, then CUDA), "opencl" or "cuda". Takes effect when the app starts. */
     public String gpuApi = "auto";
+    /** "dark" or "light". */
+    public String theme = "dark";
     /** Look for a newer version on GitHub when the app starts. */
     public boolean checkUpdates = true;
     /** Category used for /cway add commands. */

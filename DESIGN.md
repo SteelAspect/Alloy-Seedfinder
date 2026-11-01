@@ -29,3 +29,12 @@ joined crossroads in one biome, overlapping fortresses, world-border corner farm
 ## Check
 Each page: screenshot render, a search that reproduces a known result from README / the chats (SMP seed
 1473884015873122059: y48 soul sand straight quad line at 7881, -28023; roof 3x3 at 1147, -55; corner fortresses).
+
+# 2.7.0: the SlimeByte look
+
+The owner asked for the app to look like kyoubitt's SlimeByte (a Textual terminal app). Done in Swing: its light and
+dark palettes (`Theme.apply`, live switch top right, colours read at paint time so widgets follow), monospace text
+everywhere, square titled cards (`Ui.Card(title, ...)`), tabs along the top in two rows (groups, then the group's
+pages) instead of the sidebar, a form column on the left ending in the green Search button, three stat tiles over the
+map (results, the chosen one, its size), the map card with a legend bar, results in their own card, and a footer with
+key hints and the status box. The map keeps its own dark colours in both themes, like SlimeByte's.

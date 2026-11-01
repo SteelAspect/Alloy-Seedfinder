@@ -21,6 +21,7 @@ import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -61,7 +62,8 @@ public final class SeedFinderApp {
     private final MapPage mapPage;
     private final HistoryPage history;
     private final SettingsPage settingsPage;
-    private final Sidebar sidebar = new Sidebar();
+    private final Tabs tabs = new Tabs();
+    private final StatusBox footerStatus = new StatusBox();
     private final JComboBox<Settings.Seed> seedBox;
     private JComboBox<Workers.Speed> speedBox;
     private final JLabel engine = Ui.muted("Loading the world generator…");
@@ -72,13 +74,14 @@ public final class SeedFinderApp {
     public SeedFinderApp() {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setIconImages(java.util.List.of(AppIcon.image(16), AppIcon.image(32), AppIcon.image(64), AppIcon.image(128)));
+        Theme.apply(System.getProperty("seedfinder.theme", settings.theme == null ? "dark" : settings.theme));
         frame.setMinimumSize(new Dimension(1100, 700));
         frame.setSize(1380, 880);
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(Theme.BG);
 
         seedBox = Ui.combo(new Settings.Seed[0]);
-        seedBox.setPreferredSize(new Dimension(300, 34));
+        seedBox.setPreferredSize(new Dimension(400, 34));
         seedBox.addActionListener(e -> {
             if (updatingSeeds || seedBox.getSelectedIndex() < 0) return;
             settings.selected = seedBox.getSelectedIndex();
@@ -102,26 +105,22 @@ public final class SeedFinderApp {
         add("settings", settingsPage);
         content.setBackground(Theme.BG);
 
-        sidebar.section("Explore");
-        sidebar.item("map", "Map", "map");
-        sidebar.item("nearest", "Nearest structures", "list");
-        sidebar.item("overview", "Seed overview", "eye");
-        sidebar.item("seedhunts", "Seed hunts", "search");
-        sidebar.section("Overworld");
-        sidebar.item("biomes", "Biomes", "mountain");
-        sidebar.item("solid", "Solid areas", "square");
-        sidebar.item("huts", "Witch huts", "hut");
-        sidebar.item("monuments", "Quad finder", "waves");
-        sidebar.item("slime", "Slime chunks", "slime");
-        sidebar.item("slimeseeds", "Slime seeds", "slime");
-        sidebar.section("Nether");
-        sidebar.item("nether", "Nether biomes", "flame");
-        sidebar.item("fortresses", "Fortresses", "castle");
-        sidebar.item("roof", "Nether roof", "tower");
-        sidebar.section("App");
-        sidebar.item("history", "Saved results", "clock");
-        sidebar.item("settings", "Settings", "gear");
-        root.add(sidebar, BorderLayout.WEST);
+        tabs.item("Explore", "map", "Map");
+        tabs.item("Explore", "nearest", "Nearest structures");
+        tabs.item("Explore", "overview", "Seed overview");
+        tabs.item("Explore", "seedhunts", "Seed hunts");
+        tabs.item("Overworld", "biomes", "Biomes");
+        tabs.item("Overworld", "solid", "Solid areas");
+        tabs.item("Overworld", "huts", "Witch huts");
+        tabs.item("Overworld", "monuments", "Quad finder");
+        tabs.item("Overworld", "slime", "Slime chunks");
+        tabs.item("Overworld", "slimeseeds", "Slime seeds");
+        tabs.item("Nether", "nether", "Nether biomes");
+        tabs.item("Nether", "fortresses", "Fortresses");
+        tabs.item("Nether", "roof", "Nether roof");
+        tabs.item("App", "history", "Saved results");
+        tabs.item("App", "settings", "Settings");
+        root.add(footer(), BorderLayout.SOUTH);
         root.add(content, BorderLayout.CENTER);
         frame.setContentPane(root);
         seedsChanged();
@@ -188,7 +187,7 @@ public final class SeedFinderApp {
 
     void show(String id) {
         cards.show(content, id);
-        sidebar.select(id);
+        tabs.select(id);
         JComponent page = pages.get(id);
         if (page instanceof SearchPage p) p.shown();
         if (page == mapPage) mapPage.shown();
@@ -237,6 +236,7 @@ public final class SeedFinderApp {
 
     // ------------------------------------------------------------------ top bar and sidebar
 
+    /** Header: logo and name, the seed and speed, Light/Dark; under it the tabs. Footer: key hints and the status. */
     private JPanel topBar() {
         JPanel bar = new JPanel(new BorderLayout()) {
             @Override
@@ -247,12 +247,11 @@ public final class SeedFinderApp {
                 g.drawLine(0, getHeight() - 1, getWidth(), getHeight() - 1);
             }
         };
-        Theme.pad(bar, 10, 16, 10, 16);
-        JLabel logo = new JLabel(new javax.swing.ImageIcon(AppIcon.mark(30)));
-        JLabel name = Ui.label(NAME);
-        name.setFont(Theme.FONT_TITLE);
+        Theme.pad(bar, 8, 16, 0, 16);
+        JLabel logo = new JLabel(new javax.swing.ImageIcon(AppIcon.mark(22)));
+        JLabel name = Ui.strong(NAME);
+        name.setFont(Theme.FONT_BIG);
         JPanel left = Ui.row(10, logo, name);
-        bar.add(left, BorderLayout.WEST);
         Ui.FlatButton add = Ui.button("", "plus", Ui.Kind.SECONDARY);
         add.setToolTipText("Add a seed");
         add.addActionListener(e -> {
@@ -266,16 +265,180 @@ public final class SeedFinderApp {
         });
         JComboBox<Workers.Speed> speed = Ui.combo(Workers.Speed.values());
         speed.setSelectedItem(settings.speed);
-        speed.setPreferredSize(new Dimension(118, 34));
+        speed.setPreferredSize(new Dimension(150, 34));
         speed.setToolTipText("<html>" + String.join("<br>", java.util.Arrays.stream(Workers.Speed.values())
                 .map(s -> "<b>" + s.label + "</b>: " + s.help).toList()) + "</html>");
         speed.addActionListener(e -> setSpeed((Workers.Speed) speed.getSelectedItem()));
         speedBox = speed;
         update.setVisible(false);
         update.addActionListener(e -> updateClicked());
-        JPanel right = Ui.row(10, update, engine, Ui.muted("   Speed"), speed, Ui.muted("  Seed"), seedBox, add);
-        bar.add(right, BorderLayout.EAST);
+        JPanel theme = Ui.textToggle(new String[]{"Light", "Dark"}, "light".equals(Theme.current()) ? 0 : 1, i -> setTheme(i == 0 ? "light" : "dark"));
+        JPanel right = Ui.row(10, update, Ui.muted("Seed"), seedBox, add, Ui.muted("  Speed"), speed, Ui.muted(" "), theme);
+        JPanel top = Ui.clear(new BorderLayout());
+        top.add(left, BorderLayout.WEST);
+        top.add(right, BorderLayout.EAST);
+        bar.add(top, BorderLayout.NORTH);
+        bar.add(tabs, BorderLayout.CENTER);
         return bar;
+    }
+
+    private JPanel footer() {
+        JPanel bar = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                g.setColor(Theme.SIDEBAR);
+                g.fillRect(0, 0, getWidth(), getHeight());
+                g.setColor(Theme.BORDER);
+                g.drawLine(0, 0, getWidth(), 0);
+            }
+        };
+        Theme.pad(bar, 0, 16, 0, 0);
+        bar.add(Ui.row(18, Ui.hint("enter", "search"), Ui.hint("double-click", "copy /tp"), Ui.hint("drag", "move the map"),
+                Ui.hint("scroll", "zoom")), BorderLayout.WEST);
+        engine.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 16));
+        bar.add(Ui.row(0, engine, footerStatus), BorderLayout.EAST);
+        return bar;
+    }
+
+    /** The footer's status box (what the pages used to show under their form). */
+    void status(String text, Color color) {
+        footerStatus.set(text, color);
+    }
+
+    void setTheme(String name) {
+        settings.theme = name;
+        settings.save();
+        Theme.apply(name);
+        for (java.awt.Window w : java.awt.Window.getWindows()) {
+            SwingUtilities.invokeLater(() -> {
+                w.invalidate();
+                w.validate();
+                w.repaint();
+            });
+        }
+    }
+
+    /** A box in the footer's right end with the latest message, in SlimeByte's toast colours. */
+    private static final class StatusBox extends JComponent {
+        private String text = "";
+        private Color color;
+
+        StatusBox() {
+            setPreferredSize(new Dimension(10, 34));
+        }
+
+        void set(String t, Color c) {
+            text = t == null ? "" : t;
+            color = c;
+            revalidate();
+            repaint();
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(text.isEmpty() ? 0 : getFontMetrics(Theme.FONT).stringWidth(text) + 32, 34);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            if (text.isEmpty()) return;
+            Graphics2D g2 = Ui.smooth(g);
+            boolean bad = color != null && color.equals(Theme.DANGER);
+            g2.setColor(bad ? Theme.PANEL2 : Theme.TOAST_BG);
+            g2.fillRect(0, 6, getWidth(), getHeight() - 12);
+            g2.setFont(Theme.FONT);
+            g2.setColor(bad ? Theme.DANGER : Theme.TOAST_TEXT);
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(Ui.clip(g2, text, getWidth() - 32), 16, (getHeight() + fm.getAscent() - fm.getDescent()) / 2f);
+            g2.dispose();
+        }
+    }
+
+    /** Two rows of tabs: the groups, then the pages of the chosen group. The one you're on is underlined green. */
+    private final class Tabs extends JPanel {
+        private final Map<String, java.util.List<String[]>> groups = new LinkedHashMap<>();
+        private final Map<String, String> groupOf = new LinkedHashMap<>();
+        private final JPanel groupRow = Ui.clear(new FlowLayout(FlowLayout.LEFT, 0, 0)), pageRow = Ui.clear(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        private String current;
+
+        Tabs() {
+            super(new BorderLayout(0, 0));
+            setOpaque(false);
+            add(groupRow, BorderLayout.NORTH);
+            add(pageRow, BorderLayout.SOUTH);
+        }
+
+        void item(String group, String id, String text) {
+            if (!groups.containsKey(group)) {
+                groups.put(group, new ArrayList<>());
+                groupRow.add(new Tab(group, true, () -> SeedFinderApp.this.show(groups.get(group).get(0)[0])));
+            }
+            groups.get(group).add(new String[]{id, text});
+            groupOf.put(id, group);
+        }
+
+        void select(String id) {
+            current = id;
+            String g = groupOf.get(id);
+            for (Component c : groupRow.getComponents()) if (c instanceof Tab t) t.active = t.text.equals(g);
+            pageRow.removeAll();
+            if (g != null) for (String[] p : groups.get(g)) {
+                Tab t = new Tab(p[1], false, () -> SeedFinderApp.this.show(p[0]));
+                t.active = p[0].equals(id);
+                pageRow.add(t);
+            }
+            pageRow.revalidate();
+            repaint();
+        }
+    }
+
+    private static final class Tab extends JComponent {
+        final String text;
+        final boolean group;
+        boolean active, hover;
+
+        Tab(String text, boolean group, Runnable onClick) {
+            this.text = text;
+            this.group = group;
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    onClick.run();
+                }
+
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    hover = true;
+                    repaint();
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    hover = false;
+                    repaint();
+                }
+            });
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(getFontMetrics(Theme.FONT_BOLD).stringWidth(text) + 24, group ? 30 : 28);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = Ui.smooth(g);
+            g2.setFont(active ? Theme.FONT_BOLD : Theme.FONT);
+            g2.setColor(active ? Theme.ACCENT_HOVER : hover ? Theme.TEXT : group ? Theme.TEXT2 : Theme.TEXT2);
+            FontMetrics fm = g2.getFontMetrics();
+            g2.drawString(text, 12, (getHeight() + fm.getAscent() - fm.getDescent()) / 2f - (group ? 0 : 1));
+            if (active) {
+                g2.setColor(group ? Theme.ACCENT_SOFT : Theme.ACCENT);
+                g2.fillRect(group ? 0 : 6, getHeight() - 2, group ? getWidth() : getWidth() - 12, 2);
+            }
+            g2.dispose();
+        }
     }
 
     private volatile dev.steelaspect.seedfinder.store.Updater.Release release;
@@ -343,96 +506,6 @@ public final class SeedFinderApp {
             JOptionPane.showMessageDialog(frame, "Close the Seed Finder and open it again to use " + r.version() + ".", "Update", JOptionPane.INFORMATION_MESSAGE);
     }
 
-    private final class Sidebar extends JPanel {
-        private final Map<String, Item> items = new LinkedHashMap<>();
-
-        Sidebar() {
-            setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS));
-            setBackground(Theme.SIDEBAR);
-            Theme.pad(this, 14, 10, 14, 10);
-            setPreferredSize(new Dimension(212, 100));
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            g.setColor(Theme.BORDER);
-            g.drawLine(getWidth() - 1, 0, getWidth() - 1, getHeight());
-        }
-
-        void section(String text) {
-            JLabel l = Ui.muted(text);
-            l.setForeground(Theme.TEXT3);
-            Theme.pad(l, items.isEmpty() ? 2 : 16, 12, 6, 0);
-            l.setAlignmentX(LEFT_ALIGNMENT);
-            add(l);
-        }
-
-        void item(String id, String text, String icon) {
-            Item i = new Item(id, text, icon);
-            items.put(id, i);
-            add(i);
-        }
-
-        void select(String id) {
-            items.forEach((k, v) -> v.setSelected(k.equals(id)));
-        }
-    }
-
-    private final class Item extends JComponent {
-        private final String id, text, icon;
-        private boolean selected, hover;
-
-        Item(String id, String text, String icon) {
-            this.id = id;
-            this.text = text;
-            this.icon = icon;
-            setAlignmentX(LEFT_ALIGNMENT);
-            setPreferredSize(new Dimension(190, 36));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    SeedFinderApp.this.show(id);
-                }
-
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    hover = true;
-                    repaint();
-                }
-
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    hover = false;
-                    repaint();
-                }
-            });
-        }
-
-        void setSelected(boolean s) {
-            selected = s;
-            repaint();
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = Ui.smooth(g);
-            if (selected || hover) {
-                g2.setColor(selected ? Theme.ACCENT_SOFT : Theme.FIELD);
-                g2.fill(new RoundRectangle2D.Float(0, 2, getWidth(), getHeight() - 4, 14, 14));
-            }
-            Color c = selected ? Theme.ACCENT_HOVER : hover ? Theme.TEXT : Theme.TEXT2;
-            Icons.get(icon, 16, c).paintIcon(this, g2, 12, (getHeight() - 16) / 2);
-            g2.setFont(selected ? Theme.FONT_BOLD : Theme.FONT);
-            g2.setColor(selected ? Theme.TEXT : c);
-            FontMetrics fm = g2.getFontMetrics();
-            g2.drawString(text, 38, (getHeight() + fm.getAscent() - fm.getDescent()) / 2f);
-            g2.dispose();
-        }
-    }
-
     // ------------------------------------------------------------------ dialogs and helpers
 
     JDialog dialog(String title) {
@@ -456,8 +529,8 @@ public final class SeedFinderApp {
         fields.add(Ui.labelled("Name", name));
         fields.add(Ui.labelled("Seed (type /seed in game to see it)", seed));
         fields.add(Ui.labelled("World type", type));
-        JLabel error = Ui.muted(" ");
-        error.setForeground(Theme.DANGER);
+        Ui.Label error = Ui.muted(" ");
+        error.role(() -> Theme.DANGER);
         body.add(Ui.title(existing == null ? "Add a seed" : "Edit seed"), BorderLayout.NORTH);
         body.add(fields, BorderLayout.CENTER);
         Settings.Seed[] out = {null};

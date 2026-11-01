@@ -246,22 +246,106 @@ public final class FortressSearch {
      * Gaider10's CrossroadFinder shapes: 2 = double, 3 = triple line or corner, 4 = quad line, square or other, 5 = quint.
      * x, z, y: the north-west crossroad's corner and floor height.
      */
-    /** Pairs of fortresses whose boxes overlap sideways (b: minX, minZ, maxX, maxZ, x, z, floor, minY, maxY). */
+    /**
+     * Groups of fortresses whose boxes meet: first the biggest groups (4, then 3) whose boxes all share a point, or
+     * are all within 128 blocks (on both axes) of one spot, so one AFK spot reaches every one; then overlapping
+     * pairs by shared area. b: minX, minZ, maxX, maxZ, x, z, floor, minY, maxY.
+     */
     private static List<Result> overlaps(List<int[]> every, Params p, int count, Progress progress) {
         every.sort(Comparator.comparingInt(b -> b[0]));
         List<int[][]> pairs = new ArrayList<>();
+        List<int[][]> groups = new ArrayList<>();
+        int reach = 128;
         for (int i = 0; i < every.size(); i++) {
             int[] a = every.get(i);
-            for (int j = i + 1; j < every.size() && every.get(j)[0] <= a[2]; j++) {
+            List<int[]> near = new ArrayList<>();
+            for (int j = i + 1; j < every.size() && every.get(j)[0] <= a[2] + 2 * reach; j++) {
                 int[] b = every.get(j);
-                if (b[1] <= a[3] && a[1] <= b[3]) pairs.add(new int[][]{a, b});
+                if (b[1] <= a[3] + 2 * reach && a[1] <= b[3] + 2 * reach) near.add(b);
+                if (b[1] <= a[3] && a[1] <= b[3] && b[0] <= a[2]) pairs.add(new int[][]{a, b});
             }
+            // Groups starting at a (its minX is the smallest, so each group is found once).
+            for (int u = 0; u < near.size(); u++)
+                for (int v = u + 1; v < near.size(); v++) {
+                    int[] bu = near.get(u), bv = near.get(v);
+                    if (meet(reach, a, bu, bv) == null) continue;
+                    boolean inQuad = false;
+                    for (int w = v + 1; w < near.size(); w++) {
+                        int[] bw = near.get(w);
+                        if (meet(reach, a, bu, bv, bw) != null) {
+                            groups.add(new int[][]{a, bu, bv, bw});
+                            inQuad = true;
+                        }
+                    }
+                    if (!inQuad) groups.add(new int[][]{a, bu, bv});
+                }
         }
+        // Rank: four before three, boxes that really share a point before ones only within reach, then floor.
+        groups.sort((g, h) -> {
+            if (g.length != h.length) return h.length - g.length;
+            boolean sg = meet(0, g) != null, sh = meet(0, h) != null;
+            if (sg != sh) return sg ? -1 : 1;
+            return Long.compare(floor(h), floor(g));
+        });
         java.util.function.ToLongFunction<int[][]> shared = q -> (long) (Math.min(q[0][2], q[1][2]) - Math.max(q[0][0], q[1][0]) + 1)
                 * (Math.min(q[0][3], q[1][3]) - Math.max(q[0][1], q[1][1]) + 1);
         pairs.sort(Comparator.comparingLong(shared).reversed());
         List<Result> out = new ArrayList<>();
-        for (int[][] q : pairs.subList(0, Math.min(p.top(), pairs.size()))) {
+        int quads = 0, triples = 0;
+        for (int[][] g : groups) if (g.length == 4) quads++; else triples++;
+        // The best-placed groups get the real test: their pieces, and the AFK spot with the most spawnable blocks in
+        // range from all of them (the same count as a single fortress's "Spawn blocks in range", but on the pieces).
+        int rated = Math.min(groups.size(), Math.max(p.top(), 40));
+        progress.update(0.985, "Rating " + rated + " groups");
+        long seed = p.area().seed();
+        Map<int[][], long[]> ratings = new ConcurrentHashMap<>();
+        groups.subList(0, rated).parallelStream().forEach(g -> ratings.put(g, rate(seed, g, meet(reach, g))));
+        List<int[][]> top = new ArrayList<>(groups.subList(0, rated));
+        top.sort((g, h) -> Long.compare(ratings.get(h)[0], ratings.get(g)[0]));
+        top.addAll(groups.subList(rated, groups.size()));
+        for (int[][] g : top) {
+            if (out.size() >= p.top()) break;
+            int[] spot = meet(0, g);
+            boolean strict = spot != null;
+            if (!strict) spot = meet(reach, g);
+            long[] r = ratings.get(g);
+            Result res = new Result();
+            res.kind = Result.Kind.FORTRESS;
+            res.dim = Dim.NETHER;
+            res.name = g.length + " fortresses " + (strict ? "sharing a point" : "in reach");
+            res.x = (spot[0] + spot[2]) / 2;
+            res.z = (spot[1] + spot[3]) / 2;
+            res.y = 58;
+            res.minX = Integer.MAX_VALUE;
+            res.minZ = Integer.MAX_VALUE;
+            res.maxX = Integer.MIN_VALUE;
+            res.maxZ = Integer.MIN_VALUE;
+            for (int[] b : g) {
+                res.minX = Math.min(res.minX, b[0]);
+                res.minZ = Math.min(res.minZ, b[1]);
+                res.maxX = Math.max(res.maxX, b[2]);
+                res.maxZ = Math.max(res.maxZ, b[3]);
+            }
+            res.value = (g.length * 10L) + (strict ? 5 : 0);
+            res.size = g.length + (strict ? " overlap" : " in 128");
+            if (r != null) {
+                res.x = (int) r[1];
+                res.y = (int) r[2];
+                res.z = (int) r[3];
+                res.value = r[0];
+                res.size = Fmt.n(r[0]);
+                res.details.put("Farm AFK spot", r[1] + ", " + r[2] + ", " + r[3]);
+                res.details.put("Spawn blocks in range", Fmt.n(r[0]) + " from " + g.length + " fortresses (pieces within 24 to 128 of the spot)");
+                res.details.put("Best one alone", Fmt.n(r[4]) + " (the best of these fortresses with its own AFK spot)");
+            }
+            for (int k = 0; k < g.length; k++)
+                res.details.put("Fortress " + (k + 1), g[k][4] + ", " + g[k][5] + " (floor " + Fmt.n(g[k][6]) + ", y " + g[k][7] + " to " + g[k][8] + ")");
+            res.details.put("Distance", Fmt.n(p.area().distance(res.x, res.z)));
+            res.ref = new int[]{g[0][4], g[0][5]};
+            out.add(res);
+        }
+        for (int[][] q : pairs) {
+            if (out.size() >= p.top()) break;
             int[] a = q[0], b = q[1];
             int x0 = Math.max(a[0], b[0]), z0 = Math.max(a[1], b[1]), x1 = Math.min(a[2], b[2]), z1 = Math.min(a[3], b[3]);
             Result res = new Result();
@@ -283,8 +367,80 @@ public final class FortressSearch {
             res.ref = new int[]{a[4], a[5]};
             out.add(res);
         }
-        progress.update(1, Fmt.n(count) + " fortresses pass, " + Fmt.n(pairs.size()) + " overlapping pairs");
+        progress.update(1, Fmt.n(count) + " fortresses pass, " + Fmt.n(pairs.size()) + " overlapping pairs, " + Fmt.n(triples) + " groups of 3 and "
+                + Fmt.n(quads) + " of 4 within reach of one spot");
         return out;
+    }
+
+    /**
+     * Rates a group: builds each fortress's pieces and finds the AFK spot (within the meet area) whose range holds
+     * the most spawnable piece blocks from all of them. Returns {total, x, y, z, best one fortress alone}.
+     */
+    private static long[] rate(long seed, int[][] g, int[] area) {
+        List<List<BoundingBox>> pieces = new ArrayList<>();
+        for (int[] b : g) {
+            List<BoundingBox> boxes = new ArrayList<>();
+            for (StructurePiece piece : FortressBuilder.build(seed, new ChunkPos(b[4] >> 4, b[5] >> 4))) boxes.add(piece.getBoundingBox());
+            pieces.add(boxes);
+        }
+        List<BoundingBox> all = new ArrayList<>();
+        for (List<BoundingBox> l : pieces) all.addAll(l);
+        long[] best = bestSpot(all, area[0], area[2], area[1], area[3]);
+        long single = 0;
+        for (int i = 0; i < g.length; i++) {
+            int[] b = g[i];
+            single = Math.max(single, bestSpot(pieces.get(i), b[0] - 128, b[2] + 128, b[1] - 128, b[3] + 128)[0]);
+        }
+        return new long[]{best[0], best[1], best[2], best[3], single};
+    }
+
+    /** The spot in [x0, x1] x [z0, z1] with the most spawnable blocks of these boxes in range: a coarse grid, then finer. */
+    private static long[] bestSpot(List<BoundingBox> boxes, int x0, int x1, int z0, int z1) {
+        long[] best = {-1, x0, 64, z0};
+        int span = Math.max(x1 - x0, z1 - z0), step = span > 400 ? 16 : 8;
+        for (int y : new int[]{56, 64, 72})
+            for (int x = x0; x <= x1; x += step)
+                for (int z = z0; z <= z1; z += step) try_(boxes, x, y, z, best);
+        for (int s2 : new int[]{4, 1}) {
+            long[] c = best.clone();
+            for (int y = (int) c[2] - 4; y <= c[2] + 4; y += s2 == 4 ? 4 : 2)
+                for (int x = (int) c[1] - step; x <= c[1] + step; x += s2)
+                    for (int z = (int) c[3] - step; z <= c[3] + step; z += s2) try_(boxes, x, y, z, best);
+            step = s2 * 2;
+        }
+        return best;
+    }
+
+    private static void try_(List<BoundingBox> boxes, int x, int y, int z, long[] best) {
+        long t = 0;
+        for (BoundingBox b : boxes) {
+            if (b.minX() > x + 128 || b.maxX() < x - 128 || b.minZ() > z + 128 || b.maxZ() < z - 128) continue;
+            t += MonumentSearch.covered(b, x, y, z);
+        }
+        if (t > best[0]) {
+            best[0] = t;
+            best[1] = x;
+            best[2] = y;
+            best[3] = z;
+        }
+    }
+
+    /** The area within grow blocks of every box (x0, z0, x1, z1), or null if there's none. */
+    private static int[] meet(int grow, int[]... boxes) {
+        int x0 = Integer.MIN_VALUE, z0 = Integer.MIN_VALUE, x1 = Integer.MAX_VALUE, z1 = Integer.MAX_VALUE;
+        for (int[] b : boxes) {
+            x0 = Math.max(x0, b[0] - grow);
+            z0 = Math.max(z0, b[1] - grow);
+            x1 = Math.min(x1, b[2] + grow);
+            z1 = Math.min(z1, b[3] + grow);
+        }
+        return x0 <= x1 && z0 <= z1 ? new int[]{x0, z0, x1, z1} : null;
+    }
+
+    private static long floor(int[][] g) {
+        long t = 0;
+        for (int[] b : g) t += b[6];
+        return t;
     }
 
     /**

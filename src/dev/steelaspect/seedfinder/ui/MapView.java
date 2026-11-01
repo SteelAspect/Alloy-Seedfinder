@@ -514,10 +514,10 @@ public final class MapView extends JComponent {
                         g2.fill(new Ellipse2D.Double(x - 10, z - 9, 20, 20));
                         g2.setColor(new Color(layer.color));
                         g2.fill(new Ellipse2D.Double(x - 10, z - 10, 20, 20));
-                        g2.setColor(new Color(0x16181D));
+                        g2.setColor(Theme.MAP_ON_ACCENT);
                         g2.setStroke(new BasicStroke(1.4f));
                         g2.draw(new Ellipse2D.Double(x - 10, z - 10, 20, 20));
-                        Icons.get(layer.icon, 12, new Color(0x16181D)).paintIcon(this, g2, (int) Math.round(x - 6), (int) Math.round(z - 6));
+                        Icons.get(layer.icon, 12, Theme.MAP_ON_ACCENT).paintIcon(this, g2, (int) Math.round(x - 6), (int) Math.round(z - 6));
                         drawnIcons.add(icon);
                         drawnIconSpots.add(new java.awt.geom.Point2D.Double(x, z));
                     }
@@ -611,9 +611,9 @@ public final class MapView extends JComponent {
         g2.setFont(Theme.FONT_SMALL);
         FontMetrics fm = g2.getFontMetrics();
         int tw = fm.stringWidth(text) + 24;
-        g2.setColor(new Color(22, 24, 29, 220));
-        g2.fill(new RoundRectangle2D.Float((w - tw) / 2f, 10, tw, 26, 8, 8));
-        g2.setColor(Theme.TEXT2);
+        g2.setColor(Theme.MAP_PANEL);
+        g2.fill(new RoundRectangle2D.Float((w - tw) / 2f, 10, tw, 26, 0, 0));
+        g2.setColor(Theme.MAP_TEXT);
         g2.drawString(text, (w - tw) / 2f + 12, 28);
     }
 
@@ -623,7 +623,7 @@ public final class MapView extends JComponent {
             double x0 = (r.minX - centerX) / bpp + w / 2.0, z0 = (r.minZ - centerZ) / bpp + h / 2.0;
             double bw = (r.maxX - r.minX + 1) / bpp, bh = (r.maxZ - r.minZ + 1) / bpp;
             if (bw >= 4 && bh >= 4) {
-                g2.setColor(i == selected ? Theme.ACCENT : new Color(255, 255, 255, 150));
+                g2.setColor(i == selected ? Theme.MAP_ACCENT : new Color(255, 255, 255, 150));
                 g2.setStroke(new BasicStroke(i == selected ? 2f : 1.2f));
                 // Slime farms count blocks in a circle around the AFK spot.
                 if (r.kind == Result.Kind.SLIME) g2.draw(new Ellipse2D.Double(x0, z0, bw, bh));
@@ -641,10 +641,10 @@ public final class MapView extends JComponent {
             float rad = (k == selected ? 12 : 10) - (bpp >= 128 ? 3 : 0);
             g2.setColor(new Color(0, 0, 0, 120));
             g2.fill(new Ellipse2D.Double(x - rad, z - rad + 1.5, rad * 2, rad * 2));
-            g2.setColor(k == selected ? Theme.ACCENT : Theme.TEXT);
+            g2.setColor(k == selected ? Theme.MAP_ACCENT : Theme.MAP_TEXT);
             g2.fill(new Ellipse2D.Double(x - rad, z - rad, rad * 2, rad * 2));
             String s = Integer.toString(k + 1);
-            g2.setColor(k == selected ? Theme.ON_ACCENT : new Color(0x16181D));
+            g2.setColor(Theme.MAP_ON_ACCENT);
             g2.drawString(s, (float) (x - fm.stringWidth(s) / 2.0), (float) (z + fm.getAscent() / 2.0 - 1.5));
         }
     }
@@ -658,11 +658,11 @@ public final class MapView extends JComponent {
         FontMetrics fm = g2.getFontMetrics();
         for (int i = 0; i < 3; i++) {
             int bw = i == 2 ? 40 : 32;
-            g2.setColor(new Color(22, 24, 29, 220));
-            g2.fill(new RoundRectangle2D.Float(x, 10, bw, 28, 8, 8));
-            g2.setColor(Theme.BORDER_STRONG);
-            g2.draw(new RoundRectangle2D.Float(x + 0.5f, 10.5f, bw - 1, 27, 8, 8));
-            g2.setColor(Theme.TEXT);
+            g2.setColor(Theme.MAP_PANEL);
+            g2.fill(new RoundRectangle2D.Float(x, 10, bw, 28, 0, 0));
+            g2.setColor(Theme.MAP_EDGE);
+            g2.draw(new RoundRectangle2D.Float(x + 0.5f, 10.5f, bw - 1, 27, 0, 0));
+            g2.setColor(Theme.MAP_TEXT);
             g2.drawString(labels[i], x + (bw - fm.stringWidth(labels[i])) / 2f, 29);
             x += bw + 4;
         }
@@ -672,14 +672,14 @@ public final class MapView extends JComponent {
         String info = (view == null ? "" : view.dim().label) + (hoverText.isEmpty() ? "" : "  ·  " + hoverText);
         String scale = Fmt.big(bpp * 100) + " blocks";
         int iw = fm.stringWidth(info) + 20;
-        g2.setColor(new Color(22, 24, 29, 220));
-        g2.fill(new RoundRectangle2D.Float(10, h - 36, iw, 26, 8, 8));
-        g2.setColor(Theme.TEXT2);
+        g2.setColor(Theme.MAP_PANEL);
+        g2.fill(new RoundRectangle2D.Float(10, h - 36, iw, 26, 0, 0));
+        g2.setColor(Theme.MAP_TEXT2);
         g2.drawString(info, 20, h - 18);
         int sw = fm.stringWidth(scale) + 136;
-        g2.setColor(new Color(22, 24, 29, 220));
-        g2.fill(new RoundRectangle2D.Float(w - sw - 10, h - 36, sw, 26, 8, 8));
-        g2.setColor(Theme.TEXT2);
+        g2.setColor(Theme.MAP_PANEL);
+        g2.fill(new RoundRectangle2D.Float(w - sw - 10, h - 36, sw, 26, 0, 0));
+        g2.setColor(Theme.MAP_TEXT2);
         g2.setStroke(new BasicStroke(2f));
         g2.drawLine(w - sw, h - 23, w - sw + 100, h - 23);
         g2.drawLine(w - sw, h - 27, w - sw, h - 19);

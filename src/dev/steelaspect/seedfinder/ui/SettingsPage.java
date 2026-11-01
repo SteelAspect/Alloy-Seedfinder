@@ -65,8 +65,8 @@ final class SettingsPage extends JPanel {
         JPanel holder = Ui.clear(new BorderLayout());
         holder.add(column, BorderLayout.NORTH);
         javax.swing.JScrollPane scroll = Ui.scroll(holder);
-        scroll.getViewport().setBackground(Theme.BG);
-        scroll.setBackground(Theme.BG);
+        scroll.getViewport().setOpaque(false);
+        scroll.setOpaque(false);
         add(scroll, BorderLayout.CENTER);
 
         Ui.FlatButton save = Ui.button("Save settings", "check", Ui.Kind.PRIMARY);
@@ -85,15 +85,10 @@ final class SettingsPage extends JPanel {
     }
 
     private JPanel section(String title, String help, JComponent content) {
-        Ui.Card card = new Ui.Card(new BorderLayout(0, 12));
-        JPanel head = Ui.clear(new BorderLayout(0, 4));
-        JLabel t = Ui.label(title);
-        t.setFont(Theme.FONT_BOLD);
-        head.add(t, BorderLayout.NORTH);
+        Ui.Card card = new Ui.Card(title, new BorderLayout(0, 12));
         JPanel lines = Ui.clear(new java.awt.GridLayout(0, 1, 0, 2));
         for (String line : help.split("\n")) lines.add(Ui.muted(line));
-        head.add(lines, BorderLayout.CENTER);
-        card.add(head, BorderLayout.NORTH);
+        card.add(lines, BorderLayout.NORTH);
         if (content != null) card.add(content, BorderLayout.CENTER);
         card.setAlignmentX(LEFT_ALIGNMENT);
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height + 40));
