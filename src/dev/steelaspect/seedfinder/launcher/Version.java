@@ -2,7 +2,7 @@ package dev.steelaspect.seedfinder.launcher;
 
 /** The app's version, in one place for the app, the build script and the updater. */
 public final class Version {
-    public static final String VALUE = "2.6.0";
+    public static final String VALUE = "2.6.1";
 
     private Version() {}
 
